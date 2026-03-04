@@ -14,6 +14,63 @@ import allSuggestions from "@/data/suggestions.json";
 
 type Suggestion = { title: string; description: string; prompt: string };
 
+// Separate component so we can use useRef for DOM-based table extraction
+function TableWithCanvas({ children, onOpenCanvas, tableProps }: { children: React.ReactNode; onOpenCanvas: (md: string) => void; tableProps: any }) {
+  const tableRef = useRef<HTMLTableElement>(null);
+
+  const handleOpenCanvas = () => {
+    const table = tableRef.current;
+    if (!table) return;
+    const rows = table.querySelectorAll('tr');
+    if (rows.length === 0) return;
+    const mdRows: string[] = [];
+    rows.forEach((tr, i) => {
+      const cells = tr.querySelectorAll('th, td');
+      const cellTexts = Array.from(cells).map(c => (c.textContent || '').trim());
+      mdRows.push('| ' + cellTexts.join(' | ') + ' |');
+      if (i === 0) {
+        mdRows.push('| ' + cellTexts.map(() => '---').join(' | ') + ' |');
+      }
+    });
+    const md = mdRows.join('\n');
+    if (md) onOpenCanvas(md);
+  };
+
+  return (
+    <div style={{ position: 'relative', marginTop: '16px', marginBottom: '16px' }} className="group">
+      <div style={{
+        position: 'absolute', top: '-8px', right: '0',
+        transition: 'opacity 0.15s',
+        zIndex: 10,
+      }} className="opacity-0 group-hover:opacity-100">
+        <button
+          onClick={handleOpenCanvas}
+          style={{
+            background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
+            color: 'white', fontSize: '11px', padding: '4px 8px', borderRadius: '4px',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+            backdropFilter: 'blur(8px)',
+          }}
+          title="Open table in canvas"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '12px', height: '12px' }}>
+            <path d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM14 9a1 1 0 00-1-1H7a1 1 0 00-1 1v5a1 1 0 001 1h6a1 1 0 001-1V9z" />
+          </svg>
+          Open in Canvas
+        </button>
+      </div>
+      <table ref={tableRef} {...tableProps} style={{
+        width: '100%', borderCollapse: 'collapse',
+        fontSize: '13px', lineHeight: '1.5',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: '6px', overflow: 'hidden',
+      }}>
+        {children}
+      </table>
+    </div>
+  );
+}
+
 export default function ChatPage() {
   const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, deleteChat } = useChat();
   const [input, setInput] = useState("");
@@ -754,75 +811,12 @@ export default function ChatPage() {
                                 remarkPlugins={[remarkGfm]}
                                 components={{
                                   table({ children, ...props }: any) {
-                                    // Extract raw table text for canvas export
-                                    const extractTableText = (node: any): string => {
-                                      if (typeof node === 'string') return node;
-                                      if (!node) return '';
-                                      if (Array.isArray(node)) return node.map(extractTableText).join('');
-                                      if (node.props?.children) return extractTableText(node.props.children);
-                                      return '';
-                                    };
-                                    // Reconstruct markdown table from the rendered nodes
-                                    const getMarkdownTable = (): string => {
-                                      try {
-                                        const rows: string[][] = [];
-                                        const processChildren = (kids: any) => {
-                                          React.Children.forEach(kids, (child: any) => {
-                                            if (!child?.props) return;
-                                            if (child.type === 'thead' || child.type === 'tbody') {
-                                              processChildren(child.props.children);
-                                            } else if (child.type === 'tr') {
-                                              const cells: string[] = [];
-                                              React.Children.forEach(child.props.children, (cell: any) => {
-                                                cells.push(extractTableText(cell?.props?.children || ''));
-                                              });
-                                              rows.push(cells);
-                                            }
-                                          });
-                                        };
-                                        processChildren(children);
-                                        if (rows.length === 0) return '';
-                                        const header = '| ' + rows[0].join(' | ') + ' |';
-                                        const separator = '| ' + rows[0].map(() => '---').join(' | ') + ' |';
-                                        const body = rows.slice(1).map(r => '| ' + r.join(' | ') + ' |').join('\n');
-                                        return [header, separator, body].join('\n');
-                                      } catch { return ''; }
-                                    };
                                     return (
-                                      <div style={{ position: 'relative', marginTop: '16px', marginBottom: '16px' }} className="group">
-                                        <div style={{
-                                          position: 'absolute', top: '-8px', right: '0',
-                                          transition: 'opacity 0.15s',
-                                          zIndex: 10,
-                                        }} className="opacity-0 group-hover:opacity-100">
-                                          <button
-                                            onClick={() => {
-                                              const md = getMarkdownTable();
-                                              if (md) setActiveArtifact({ type: 'table' as any, content: md, language: 'markdown', title: 'Table', id: Date.now().toString() });
-                                            }}
-                                            style={{
-                                              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
-                                              color: 'white', fontSize: '11px', padding: '4px 8px', borderRadius: '4px',
-                                              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                                              backdropFilter: 'blur(8px)',
-                                            }}
-                                            title="Open table in canvas"
-                                          >
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '12px', height: '12px' }}>
-                                              <path d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM14 9a1 1 0 00-1-1H7a1 1 0 00-1 1v5a1 1 0 001 1h6a1 1 0 001-1V9z" />
-                                            </svg>
-                                            Open in Canvas
-                                          </button>
-                                        </div>
-                                        <table {...props} style={{
-                                          width: '100%', borderCollapse: 'collapse',
-                                          fontSize: '13px', lineHeight: '1.5',
-                                          border: '1px solid rgba(255,255,255,0.1)',
-                                          borderRadius: '6px', overflow: 'hidden',
-                                        }}>
-                                          {children}
-                                        </table>
-                                      </div>
+                                      <TableWithCanvas onOpenCanvas={(md: string) => {
+                                        setActiveArtifact({ type: 'table' as any, content: md, language: 'markdown', title: 'Table', id: Date.now().toString() });
+                                      }} tableProps={props}>
+                                        {children}
+                                      </TableWithCanvas>
                                     );
                                   },
                                   thead({ children, ...props }: any) {
