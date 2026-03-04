@@ -53,6 +53,7 @@ export default function ChatPage() {
   });
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"general" | "advanced">("general");
 
   // Search capability detection
   const [searchCapability, setSearchCapability] = useState<{
@@ -371,7 +372,7 @@ export default function ChatPage() {
           {showSettings ? (
             /* ─── SETTINGS VIEW ─── */
             <div className="flex-1 overflow-y-auto flex items-center justify-center p-6 md:p-12">
-              <div className="settings-card w-full max-w-xl animate-fade-in relative" style={{ padding: '40px 48px' }}>
+              <div className="settings-card w-full max-w-xl animate-fade-in relative" style={{ padding: '40px 48px', height: '680px', overflowY: 'auto' }}>
                 {/* Close Button */}
                 <button
                   onClick={() => setShowSettings(false)}
@@ -385,9 +386,33 @@ export default function ChatPage() {
                   </svg>
                 </button>
 
-                <div className="mb-10 text-center">
+                <div className="mb-8 text-center">
                   <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>Settings</h1>
                   <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>Configure your {botName} agent</p>
+                </div>
+
+                {/* Tab Navigation */}
+                <div style={{ display: 'flex', gap: '0', marginBottom: '32px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                  {(['general', 'advanced'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setSettingsTab(tab)}
+                      style={{
+                        padding: '10px 20px',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: settingsTab === tab ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: settingsTab === tab ? '2px solid #3B82F6' : '2px solid transparent',
+                        marginBottom: '-1px',
+                        cursor: 'pointer',
+                        transition: 'color 0.15s ease',
+                      }}
+                    >
+                      {tab === 'general' ? '⚙️ General' : '🔧 Advanced'}
+                    </button>
+                  ))}
                 </div>
 
                 {!settingsLoaded ? (
@@ -397,263 +422,266 @@ export default function ChatPage() {
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
 
-                    {/* ── LLM Provider Section ── */}
-                    <div>
-                      <div className="flex items-center gap-2" style={{ marginBottom: '20px' }}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-tertiary)' }} viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-                        </svg>
-                        <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>LLM Provider</h2>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                        <div>
-                          <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>API Base URL</label>
-                          <input
-                            type="url"
-                            value={settings.openaiApiBase}
-                            onChange={(e) => setSettings({ ...settings, openaiApiBase: e.target.value })}
-                            className="form-input"
-                            placeholder="https://openrouter.ai/api/v1"
-                          />
+                    {settingsTab === 'general' && (<>
+                      {/* ── LLM Provider Section ── */}
+                      <div>
+                        <div className="flex items-center gap-2" style={{ marginBottom: '20px' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: 'var(--text-tertiary)' }} viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                          </svg>
+                          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>LLM Provider</h2>
                         </div>
-                        <div>
-                          <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>API Key</label>
-                          <input
-                            type="password"
-                            value={settings.openaiApiKey}
-                            onChange={(e) => setSettings({ ...settings, openaiApiKey: e.target.value })}
-                            className="form-input"
-                            placeholder="sk-..."
-                          />
-                          <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Stored locally. Never transmitted to us.</p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                          <div>
+                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>API Base URL</label>
+                            <input
+                              type="url"
+                              value={settings.openaiApiBase}
+                              onChange={(e) => setSettings({ ...settings, openaiApiBase: e.target.value })}
+                              className="form-input"
+                              placeholder="https://openrouter.ai/api/v1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>API Key</label>
+                            <input
+                              type="password"
+                              value={settings.openaiApiKey}
+                              onChange={(e) => setSettings({ ...settings, openaiApiKey: e.target.value })}
+                              className="form-input"
+                              placeholder="sk-..."
+                            />
+                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Stored locally. Never transmitted to us.</p>
+                          </div>
+                          <div>
+                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Model</label>
+                            <input
+                              type="text"
+                              value={settings.model}
+                              onChange={(e) => setSettings({ ...settings, model: e.target.value })}
+                              className="form-input"
+                              placeholder="google/gemini-2.5-flash"
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Model</label>
-                          <input
-                            type="text"
-                            value={settings.model}
-                            onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-                            className="form-input"
-                            placeholder="google/gemini-2.5-flash"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <hr className="apple-divider" />
-
-                    {/* ── Search Capability Detection ── */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-4">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: searchCapability?.effectiveSearch ? '#34D399' : 'var(--text-tertiary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="11" cy="11" r="8" />
-                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                        <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Search Capability</h2>
                       </div>
 
-                      {/* Detection Status */}
-                      <div style={{
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        marginBottom: '16px',
-                      }}>
-                        {searchCapability ? (
-                          <>
-                            <div className="flex items-center gap-2 mb-2">
-                              <span style={{
-                                display: 'inline-block',
-                                width: '8px',
-                                height: '8px',
-                                borderRadius: '50%',
-                                background: searchCapability.effectiveSearch ? '#34D399' : '#EF4444',
-                                boxShadow: searchCapability.effectiveSearch ? '0 0 6px #34D39966' : '0 0 6px #EF444466',
-                              }} />
-                              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {searchCapability.effectiveSearch ? 'Search Available' : 'No Search Detected'}
-                              </span>
-                              {searchCapability.confidence && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{
-                                  background: searchCapability.confidence === 'high' ? 'rgba(52,211,153,0.15)' :
-                                    searchCapability.confidence === 'medium' ? 'rgba(251,191,36,0.15)' : 'rgba(239,68,68,0.15)',
-                                  color: searchCapability.confidence === 'high' ? '#34D399' :
-                                    searchCapability.confidence === 'medium' ? '#FBB724' : '#EF4444',
-                                }}>
-                                  {searchCapability.confidence} confidence
+                    </>)}
+
+                    {settingsTab === 'advanced' && (<>
+                      {/* ── Search Capability Detection ── */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: searchCapability?.effectiveSearch ? '#34D399' : 'var(--text-tertiary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Search Capability</h2>
+                        </div>
+
+                        {/* Detection Status */}
+                        <div style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          borderRadius: '12px',
+                          padding: '16px',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          marginBottom: '16px',
+                        }}>
+                          {searchCapability ? (
+                            <>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span style={{
+                                  display: 'inline-block',
+                                  width: '8px',
+                                  height: '8px',
+                                  borderRadius: '50%',
+                                  background: searchCapability.effectiveSearch ? '#34D399' : '#EF4444',
+                                  boxShadow: searchCapability.effectiveSearch ? '0 0 6px #34D39966' : '0 0 6px #EF444466',
+                                }} />
+                                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                  {searchCapability.effectiveSearch ? 'Search Available' : 'No Search Detected'}
                                 </span>
-                              )}
-                            </div>
-                            <p className="text-[12px]" style={{ color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
-                              <strong style={{ color: 'var(--text-secondary)' }}>{searchCapability.provider}</strong> — {searchCapability.detail}
+                                {searchCapability.confidence && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{
+                                    background: searchCapability.confidence === 'high' ? 'rgba(52,211,153,0.15)' :
+                                      searchCapability.confidence === 'medium' ? 'rgba(251,191,36,0.15)' : 'rgba(239,68,68,0.15)',
+                                    color: searchCapability.confidence === 'high' ? '#34D399' :
+                                      searchCapability.confidence === 'medium' ? '#FBB724' : '#EF4444',
+                                  }}>
+                                    {searchCapability.confidence} confidence
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[12px]" style={{ color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                                <strong style={{ color: 'var(--text-secondary)' }}>{searchCapability.provider}</strong> — {searchCapability.detail}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                              Save your LLM settings first, then detection will run automatically.
                             </p>
-                          </>
-                        ) : (
-                          <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
-                            Save your LLM settings first, then detection will run automatically.
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Manual Override Toggle */}
-                      <div className="flex items-center justify-between" style={{ padding: '8px 0' }}>
-                        <div>
-                          <p className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>Prefer LLM Search</p>
-                          <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '2px' }}>
-                            Override auto-detection — force PicoBot to use LLM search
-                          </p>
+                          )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {searchOverride !== null && (
+
+                        {/* Manual Override Toggle */}
+                        <div className="flex items-center justify-between" style={{ padding: '8px 0' }}>
+                          <div>
+                            <p className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>Prefer LLM Search</p>
+                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                              Override auto-detection — force PicoBot to use LLM search
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {searchOverride !== null && (
+                              <button
+                                onClick={async () => {
+                                  setSearchOverride(null);
+                                  await fetch('/api/search-capability', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ override: null }),
+                                  });
+                                  refreshSearchCapability();
+                                }}
+                                className="text-[10px] px-2 py-0.5 rounded"
+                                style={{ color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)' }}
+                              >
+                                Reset to Auto
+                              </button>
+                            )}
                             <button
                               onClick={async () => {
-                                setSearchOverride(null);
+                                const newVal = searchOverride === null ? true : !searchOverride;
+                                setSearchOverride(newVal);
                                 await fetch('/api/search-capability', {
                                   method: 'POST',
                                   headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ override: null }),
+                                  body: JSON.stringify({ override: newVal }),
                                 });
                                 refreshSearchCapability();
                               }}
-                              className="text-[10px] px-2 py-0.5 rounded"
-                              style={{ color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)' }}
+                              className="relative w-11 h-6 rounded-full transition-colors duration-200"
+                              style={{
+                                background: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
+                                  ? '#34D399' : 'rgba(255,255,255,0.1)',
+                              }}
                             >
-                              Reset to Auto
+                              <span
+                                className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
+                                style={{
+                                  transform: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
+                                    ? 'translateX(20px)' : 'translateX(0)',
+                                }}
+                              />
                             </button>
-                          )}
+                          </div>
+                        </div>
+                      </div>
+                    </>)}
+
+                    {settingsTab === 'general' && (<>
+                      {/* ── Telegram Section ── */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#2AABEE' }} viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+                            </svg>
+                            <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Telegram</h2>
+                          </div>
                           <button
-                            onClick={async () => {
-                              const newVal = searchOverride === null ? true : !searchOverride;
-                              setSearchOverride(newVal);
-                              await fetch('/api/search-capability', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ override: newVal }),
-                              });
-                              refreshSearchCapability();
-                            }}
+                            onClick={() => setTelegram({ ...telegram, enabled: !telegram.enabled })}
                             className="relative w-11 h-6 rounded-full transition-colors duration-200"
                             style={{
-                              background: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
-                                ? '#34D399' : 'rgba(255,255,255,0.1)',
+                              background: telegram.enabled ? '#2AABEE' : 'rgba(255,255,255,0.1)',
                             }}
                           >
                             <span
                               className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
-                              style={{
-                                transform: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
-                                  ? 'translateX(20px)' : 'translateX(0)',
-                              }}
+                              style={{ transform: telegram.enabled ? 'translateX(20px)' : 'translateX(0)' }}
                             />
                           </button>
                         </div>
+                        {telegram.enabled && (
+                          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                            <div>
+                              <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Bot Token</label>
+                              <input
+                                type="password"
+                                value={telegram.token}
+                                onChange={(e) => setTelegram({ ...telegram, token: e.target.value })}
+                                className="form-input"
+                                placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                              />
+                              <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Get this from @BotFather on Telegram</p>
+                            </div>
+                            <div>
+                              <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Allowed User IDs</label>
+                              <input
+                                type="text"
+                                value={telegram.allowFrom}
+                                onChange={(e) => setTelegram({ ...telegram, allowFrom: e.target.value })}
+                                className="form-input"
+                                placeholder="123456789, 987654321"
+                              />
+                              <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Comma-separated. Leave empty to allow anyone.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
 
-                    <hr className="apple-divider" />
+                      <hr className="apple-divider" />
 
-                    {/* ── Telegram Section ── */}
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#2AABEE' }} viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
-                          </svg>
-                          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Telegram</h2>
+                      {/* ── Discord Section ── */}
+                      <div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#5865F2' }} viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z" />
+                            </svg>
+                            <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Discord</h2>
+                          </div>
+                          <button
+                            onClick={() => setDiscord({ ...discord, enabled: !discord.enabled })}
+                            className="relative w-11 h-6 rounded-full transition-colors duration-200"
+                            style={{
+                              background: discord.enabled ? '#5865F2' : 'rgba(255,255,255,0.1)',
+                            }}
+                          >
+                            <span
+                              className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
+                              style={{ transform: discord.enabled ? 'translateX(20px)' : 'translateX(0)' }}
+                            />
+                          </button>
                         </div>
-                        <button
-                          onClick={() => setTelegram({ ...telegram, enabled: !telegram.enabled })}
-                          className="relative w-11 h-6 rounded-full transition-colors duration-200"
-                          style={{
-                            background: telegram.enabled ? '#2AABEE' : 'rgba(255,255,255,0.1)',
-                          }}
-                        >
-                          <span
-                            className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
-                            style={{ transform: telegram.enabled ? 'translateX(20px)' : 'translateX(0)' }}
-                          />
-                        </button>
+                        {discord.enabled && (
+                          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                            <div>
+                              <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Bot Token</label>
+                              <input
+                                type="password"
+                                value={discord.token}
+                                onChange={(e) => setDiscord({ ...discord, token: e.target.value })}
+                                className="form-input"
+                                placeholder="MTIzNDU2Nzg5MDEyMzQ1Njc4OQ..."
+                              />
+                              <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>From the Discord Developer Portal → Bot tab</p>
+                            </div>
+                            <div>
+                              <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Allowed User IDs</label>
+                              <input
+                                type="text"
+                                value={discord.allowFrom}
+                                onChange={(e) => setDiscord({ ...discord, allowFrom: e.target.value })}
+                                className="form-input"
+                                placeholder="123456789012345678"
+                              />
+                              <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Comma-separated. Leave empty to allow anyone.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {telegram.enabled && (
-                        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                          <div>
-                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Bot Token</label>
-                            <input
-                              type="password"
-                              value={telegram.token}
-                              onChange={(e) => setTelegram({ ...telegram, token: e.target.value })}
-                              className="form-input"
-                              placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-                            />
-                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Get this from @BotFather on Telegram</p>
-                          </div>
-                          <div>
-                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Allowed User IDs</label>
-                            <input
-                              type="text"
-                              value={telegram.allowFrom}
-                              onChange={(e) => setTelegram({ ...telegram, allowFrom: e.target.value })}
-                              className="form-input"
-                              placeholder="123456789, 987654321"
-                            />
-                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Comma-separated. Leave empty to allow anyone.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <hr className="apple-divider" />
-
-                    {/* ── Discord Section ── */}
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#5865F2' }} viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189z" />
-                          </svg>
-                          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Discord</h2>
-                        </div>
-                        <button
-                          onClick={() => setDiscord({ ...discord, enabled: !discord.enabled })}
-                          className="relative w-11 h-6 rounded-full transition-colors duration-200"
-                          style={{
-                            background: discord.enabled ? '#5865F2' : 'rgba(255,255,255,0.1)',
-                          }}
-                        >
-                          <span
-                            className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
-                            style={{ transform: discord.enabled ? 'translateX(20px)' : 'translateX(0)' }}
-                          />
-                        </button>
-                      </div>
-                      {discord.enabled && (
-                        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                          <div>
-                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Bot Token</label>
-                            <input
-                              type="password"
-                              value={discord.token}
-                              onChange={(e) => setDiscord({ ...discord, token: e.target.value })}
-                              className="form-input"
-                              placeholder="MTIzNDU2Nzg5MDEyMzQ1Njc4OQ..."
-                            />
-                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>From the Discord Developer Portal → Bot tab</p>
-                          </div>
-                          <div>
-                            <label className="block text-[13px] font-medium" style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>Allowed User IDs</label>
-                            <input
-                              type="text"
-                              value={discord.allowFrom}
-                              onChange={(e) => setDiscord({ ...discord, allowFrom: e.target.value })}
-                              className="form-input"
-                              placeholder="123456789012345678"
-                            />
-                            <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '6px' }}>Comma-separated. Leave empty to allow anyone.</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    </>)}
 
                     {/* ── Save ── */}
                     <div className="pt-4">
