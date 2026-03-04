@@ -11,7 +11,9 @@ A private, local-first agentic chat interface designed to run alongside the Pico
 - **Voice-Enabled**: Real-time speech-to-text transcription using the Web Speech API.
 - **Smart Suggestions**: A rotating pool of 20+ tailored use cases—from website monitoring and whale tracking to professional drafting and brainstorming.
 - **Local-First History**: Full conversation persistence using a local SQLite database (`picobot.db`).
+- **LLM Search Detection**: Auto-detects whether your LLM provider supports native web search/grounding (Google Gemini, Perplexity, OpenAI, etc.) and optimises search behaviour accordingly.
 - **PicoBot Integration**: Designed to interact with the PicoBot binary for executing heavy-duty agentic tasks.
+- **Telegram & Discord Integration**: Connect your agent to Telegram and Discord bots from the Settings panel.
 
 ## 🛠️ Tech Stack
 
@@ -25,10 +27,11 @@ A private, local-first agentic chat interface designed to run alongside the Pico
 
 ### Prerequisites
 
-- **Next.js**: Node.js 18.x or later.
+- **Node.js**: 18.x or later.
 - **PicoBot Binary**: Ensure you have the `picobot` binary in the `bin/` directory for your platform.
   - Windows: `bin/picobot.exe`
-  - Linux: `bin/picobot`
+  - macOS: `public/bin/picobot-darwin-amd64`
+  - Linux: `public/bin/picobot-linux-amd64`
 
 ### Installation
 
@@ -42,8 +45,44 @@ A private, local-first agentic chat interface designed to run alongside the Pico
    npm run dev
    ```
 
-3. Open [http://localhost:3001](http://localhost:3001) in your browser.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🐳 Docker
+
+For users who prefer running PicoBot Chat in a container for isolation and security:
+
+### Quick Start
+
+```bash
+docker compose up -d
+```
+
+The app will be available at [http://localhost:3000](http://localhost:3000).
+
+### What's Included
+
+- **Multi-stage Alpine build** — small, production-optimised image.
+- **Persistent data volume** — SQLite database and PicoBot config survive container restarts.
+- **Auto-restart** — the container restarts automatically unless explicitly stopped.
+
+### Manual Build & Run
+
+```bash
+# Build the image
+docker build -t picobot-chat .
+
+# Run the container
+docker run -d -p 3000:3000 -v picobot-data:/app/data --name picobot-chat picobot-chat
+```
+
+### Stopping
+
+```bash
+docker compose down        # stop container (data preserved)
+docker compose down -v     # stop container and delete data volume
+```
 
 ## ⚖️ License
 
-This project is private and intended for local use. 
+This project is private and intended for local use.
+
