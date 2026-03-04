@@ -250,6 +250,24 @@ export default function ChatPage() {
       const data = await res.json();
       const aiMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: data.response };
       addMessageToChat(targetChatId, aiMsg);
+
+      // Auto-open canvas for the first table or code block in the response
+      const responseText = convertDelimitedToMarkdown(data.response || '');
+      // Check for markdown tables (lines starting with |)
+      const tableMatch = responseText.match(/(?:^[ \t]*\|.+\|[ \t]*$\n?){3,}/m);
+      if (tableMatch) {
+        // Parse the matched table block into proper markdown
+        const tableLines = tableMatch[0].split('\n').filter((l: string) => l.trim().startsWith('|'));
+        if (tableLines.length >= 2) {
+          setActiveArtifact({ type: 'table' as any, content: tableLines.join('\n'), language: 'markdown', title: 'Table', id: Date.now().toString() });
+        }
+      } else {
+        // Check for fenced code blocks
+        const codeMatch = responseText.match(/```(\w+)?\n([\s\S]*?)```/);
+        if (codeMatch) {
+          setActiveArtifact({ type: 'code', content: codeMatch[2].replace(/\n$/, ''), language: codeMatch[1] || 'text', title: 'Generated Code', id: Date.now().toString() });
+        }
+      }
     } catch (err) {
       const errMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: `⚠️ Failed to reach ${botName}. Check if the binary exists in \`./bin/picobot.exe\`.` };
       addMessageToChat(targetChatId, errMsg);
