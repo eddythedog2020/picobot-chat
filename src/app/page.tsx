@@ -750,6 +750,105 @@ export default function ChatPage() {
                             <div className="prose prose-invert max-w-none">
                               <ReactMarkdown
                                 components={{
+                                  table({ children, ...props }: any) {
+                                    // Extract raw table text for canvas export
+                                    const extractTableText = (node: any): string => {
+                                      if (typeof node === 'string') return node;
+                                      if (!node) return '';
+                                      if (Array.isArray(node)) return node.map(extractTableText).join('');
+                                      if (node.props?.children) return extractTableText(node.props.children);
+                                      return '';
+                                    };
+                                    // Reconstruct markdown table from the rendered nodes
+                                    const getMarkdownTable = (): string => {
+                                      try {
+                                        const rows: string[][] = [];
+                                        const processChildren = (kids: any) => {
+                                          React.Children.forEach(kids, (child: any) => {
+                                            if (!child?.props) return;
+                                            if (child.type === 'thead' || child.type === 'tbody') {
+                                              processChildren(child.props.children);
+                                            } else if (child.type === 'tr') {
+                                              const cells: string[] = [];
+                                              React.Children.forEach(child.props.children, (cell: any) => {
+                                                cells.push(extractTableText(cell?.props?.children || ''));
+                                              });
+                                              rows.push(cells);
+                                            }
+                                          });
+                                        };
+                                        processChildren(children);
+                                        if (rows.length === 0) return '';
+                                        const header = '| ' + rows[0].join(' | ') + ' |';
+                                        const separator = '| ' + rows[0].map(() => '---').join(' | ') + ' |';
+                                        const body = rows.slice(1).map(r => '| ' + r.join(' | ') + ' |').join('\n');
+                                        return [header, separator, body].join('\n');
+                                      } catch { return ''; }
+                                    };
+                                    return (
+                                      <div style={{ position: 'relative', marginTop: '16px', marginBottom: '16px' }} className="group">
+                                        <div style={{
+                                          position: 'absolute', top: '-8px', right: '0',
+                                          opacity: 0, transition: 'opacity 0.15s',
+                                          zIndex: 10,
+                                        }} className="group-[:hover]:opacity-100">
+                                          <button
+                                            onClick={() => {
+                                              const md = getMarkdownTable();
+                                              if (md) setActiveArtifact({ type: 'table' as any, content: md, language: 'markdown', title: 'Table', id: Date.now().toString() });
+                                            }}
+                                            style={{
+                                              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.1)',
+                                              color: 'white', fontSize: '11px', padding: '4px 8px', borderRadius: '4px',
+                                              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                                              backdropFilter: 'blur(8px)',
+                                            }}
+                                            title="Open table in canvas"
+                                          >
+                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: '12px', height: '12px' }}>
+                                              <path d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM14 9a1 1 0 00-1-1H7a1 1 0 00-1 1v5a1 1 0 001 1h6a1 1 0 001-1V9z" />
+                                            </svg>
+                                            Open in Canvas
+                                          </button>
+                                        </div>
+                                        <table {...props} style={{
+                                          width: '100%', borderCollapse: 'collapse',
+                                          fontSize: '13px', lineHeight: '1.5',
+                                          border: '1px solid rgba(255,255,255,0.1)',
+                                          borderRadius: '6px', overflow: 'hidden',
+                                        }}>
+                                          {children}
+                                        </table>
+                                      </div>
+                                    );
+                                  },
+                                  thead({ children, ...props }: any) {
+                                    return <thead {...props} style={{ background: 'rgba(255,255,255,0.06)' }}>{children}</thead>;
+                                  },
+                                  th({ children, ...props }: any) {
+                                    return <th {...props} style={{
+                                      padding: '8px 12px', textAlign: 'left', fontWeight: 600,
+                                      fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px',
+                                      color: 'rgba(255,255,255,0.7)',
+                                      borderBottom: '1px solid rgba(255,255,255,0.12)',
+                                      borderRight: '1px solid rgba(255,255,255,0.06)',
+                                    }}>{children}</th>;
+                                  },
+                                  td({ children, ...props }: any) {
+                                    return <td {...props} style={{
+                                      padding: '8px 12px',
+                                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                      borderRight: '1px solid rgba(255,255,255,0.06)',
+                                      color: 'rgba(255,255,255,0.85)',
+                                    }}>{children}</td>;
+                                  },
+                                  tr({ children, node, ...props }: any) {
+                                    return <tr {...props} style={{
+                                      transition: 'background 0.1s',
+                                    }} onMouseEnter={(e: any) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                                      onMouseLeave={(e: any) => e.currentTarget.style.background = 'transparent'}
+                                    >{children}</tr>;
+                                  },
                                   code({ node, inline, className, children, ...props }: any) {
                                     const match = /language-(\w+)/.exec(className || '');
                                     const isBlock = !inline && match;
@@ -778,7 +877,30 @@ export default function ChatPage() {
                                   }
                                 }}
                               >
-                                {msg.content.replace(/PicoBot/g, botName)}
+                                {(() => {
+                                  // Pre-process: fix pipe-delimited tables missing the markdown separator row
+                                  let text = msg.content.replace(/PicoBot/g, botName);
+                                  const lines = text.split('\n');
+                                  const processed: string[] = [];
+                                  for (let i = 0; i < lines.length; i++) {
+                                    const line = lines[i].trim();
+                                    const nextLine = i + 1 < lines.length ? lines[i + 1].trim() : '';
+                                    processed.push(lines[i]);
+                                    // If this line looks like a pipe-delimited header row and the next line is NOT a separator
+                                    if (line.startsWith('|') && line.endsWith('|') && line.split('|').filter(Boolean).length >= 2) {
+                                      const isSeparator = (l: string) => /^\|[\s\-:|]+\|$/.test(l);
+                                      if (!isSeparator(nextLine) && nextLine.startsWith('|') && nextLine.endsWith('|')) {
+                                        // Check if any previous line was already a separator for this table
+                                        const prevLine = i > 0 ? processed[processed.length - 2]?.trim() : '';
+                                        if (!isSeparator(prevLine)) {
+                                          const colCount = line.split('|').filter(Boolean).length;
+                                          processed.push('| ' + Array(colCount).fill('---').join(' | ') + ' |');
+                                        }
+                                      }
+                                    }
+                                  }
+                                  return processed.join('\n');
+                                })()}
                               </ReactMarkdown>
                             </div>
                           ) : (

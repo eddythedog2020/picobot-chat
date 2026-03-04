@@ -16,7 +16,7 @@ import "prismjs/components/prism-sql";
 import "prismjs/components/prism-markdown";
 import "prismjs/components/prism-markup";
 
-export type ArtifactType = "code" | "markdown";
+export type ArtifactType = "code" | "markdown" | "table";
 
 export interface Artifact {
     id: string;
@@ -41,12 +41,13 @@ export default function ArtifactPanel({ artifact, isOpen, onClose }: ArtifactPan
     const startWidth = useRef(0);
 
     const isMarkdown = artifact?.type === "markdown" || artifact?.language?.toLowerCase() === "markdown";
+    const isTable = artifact?.type === "table";
     const isHtml = artifact?.type === "code" && artifact?.language?.toLowerCase() === "html";
-    const showTabs = isMarkdown || isHtml;
+    const showTabs = isMarkdown || isHtml || isTable;
 
     useEffect(() => {
         if (artifact) {
-            setViewMode(isMarkdown || isHtml ? "preview" : "code");
+            setViewMode(isMarkdown || isHtml || isTable ? "preview" : "code");
         }
     }, [artifact?.id, isMarkdown, isHtml]);
 
@@ -196,9 +197,45 @@ export default function ArtifactPanel({ artifact, isOpen, onClose }: ArtifactPan
             )}
             <div className={`flex-1 overflow-auto ${viewMode === "preview" && isHtml ? "bg-white" : "bg-[#0a0a0a]"}`}>
                 {viewMode === "preview" ? (
-                    isMarkdown ? (
+                    isMarkdown || isTable ? (
                         <div className="prose prose-invert max-w-none" style={{ padding: '48px 40px 40px 40px' }}>
-                            <ReactMarkdown>{artifact.content}</ReactMarkdown>
+                            <ReactMarkdown
+                                components={{
+                                    table({ children, ...props }: any) {
+                                        return <table {...props} style={{
+                                            width: '100%', borderCollapse: 'collapse',
+                                            fontSize: '13px', lineHeight: '1.5',
+                                            border: '1px solid rgba(255,255,255,0.1)',
+                                        }}>{children}</table>;
+                                    },
+                                    thead({ children, ...props }: any) {
+                                        return <thead {...props} style={{ background: 'rgba(255,255,255,0.06)' }}>{children}</thead>;
+                                    },
+                                    th({ children, ...props }: any) {
+                                        return <th {...props} style={{
+                                            padding: '10px 14px', textAlign: 'left', fontWeight: 600,
+                                            fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px',
+                                            color: 'rgba(255,255,255,0.7)',
+                                            borderBottom: '1px solid rgba(255,255,255,0.12)',
+                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                        }}>{children}</th>;
+                                    },
+                                    td({ children, ...props }: any) {
+                                        return <td {...props} style={{
+                                            padding: '10px 14px',
+                                            borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                            borderRight: '1px solid rgba(255,255,255,0.06)',
+                                            color: 'rgba(255,255,255,0.85)',
+                                        }}>{children}</td>;
+                                    },
+                                    tr({ children, node, ...props }: any) {
+                                        return <tr {...props} style={{ transition: 'background 0.1s' }}
+                                            onMouseEnter={(e: any) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                                            onMouseLeave={(e: any) => e.currentTarget.style.background = 'transparent'}
+                                        >{children}</tr>;
+                                    },
+                                }}
+                            >{artifact.content}</ReactMarkdown>
                         </div>
                     ) : isHtml ? (
                         <iframe
