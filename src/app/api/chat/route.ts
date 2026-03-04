@@ -41,6 +41,16 @@ export async function POST(req: NextRequest) {
     // Always cite sources for news and factual claims
     promptSuffix += `\n\n(System Note: Whenever you reference news articles, current events, statistics, or factual claims that come from external sources, you MUST cite your sources. Include the publication name and URL where possible. Format citations clearly at the end of your response, e.g. "Source: [Publication Name](URL)". Never present news or factual information without attribution.)`;
 
+    // Instruct the bot to format tabular data as proper markdown tables
+    promptSuffix += `\n\n(System Note: When you present tabular, delimited, or structured data (pipe-delimited, comma-separated, tab-separated, semicolon-separated, or any list of records with consistent columns), you MUST format it as a proper markdown table. Each row MUST be on its own line. Always include a header row followed by a separator row using dashes. Example format:
+
+| Column A | Column B | Column C |
+| --- | --- | --- |
+| value1 | value2 | value3 |
+| value4 | value5 | value6 |
+
+Never put the entire table on a single line. Each row must be separated by a newline character.)`;
+
     const fullMessage = message + promptSuffix;
 
 
