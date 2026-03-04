@@ -238,11 +238,16 @@ export default function ChatPage() {
     setIsLoading(true);
 
     try {
+      // Get current conversation history for context
+      const currentChat = chats.find(c => c.id === targetChatId);
+      const history = currentChat?.messages || [];
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsgContent,
+          history: history.slice(-20), // last 20 messages for context
           settings,
         }),
       });

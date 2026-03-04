@@ -8,10 +8,24 @@ import { detectSearchCapability } from "@/lib/searchDetection";
 const execFileAsync = promisify(execFile);
 
 export async function POST(req: NextRequest) {
-    const { message } = await req.json();
+    const { message, history } = await req.json();
 
     if (!message) {
         return NextResponse.json({ error: "Message is required" }, { status: 400 });
+    }
+
+    // Build conversation context from history
+    let conversationContext = '';
+    if (history && Array.isArray(history) && history.length > 0) {
+        const contextLines = history.map((msg: { role: string; content: string }) => {
+            const role = msg.role === 'user' ? 'User' : 'Assistant';
+            // Truncate long assistant messages to keep context manageable
+            const content = msg.role === 'ai' && msg.content.length > 500
+                ? msg.content.substring(0, 500) + '...[truncated]'
+                : msg.content;
+            return `${role}: ${content}`;
+        });
+        conversationContext = `(System Note: Here is the conversation history for context. Use this to understand references like "the data", "that table", etc.)\n\n${contextLines.join('\n\n')}\n\n---\nCurrent message:\n`;
     }
 
     // Read settings from SQLite (these are the user's preferred provider settings)
@@ -41,7 +55,7 @@ export async function POST(req: NextRequest) {
     // Always cite sources for news and factual claims
     promptSuffix += `\n\n(System Note: Whenever you reference news articles, current events, statistics, or factual claims that come from external sources, you MUST cite your sources. Include the publication name and URL where possible. Format citations clearly at the end of your response, e.g. "Source: [Publication Name](URL)". Never present news or factual information without attribution.)`;
 
-    const fullMessage = message + promptSuffix;
+    const fullMessage = conversationContext + message + promptSuffix;
 
 
 
