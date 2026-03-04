@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.env*
+.vscode
+.idea
+picobot-main
+bin/picobot.exe
+public/bin/picobot-darwin-amd64
+src/picobot-temp

@@ -1,0 +1,15 @@
+services:
+  picobot-chat:
+    build: .
+    container_name: picobot-chat
+    ports:
+      - "3000:3000"
+    volumes:
+      - picobot-data:/app/data
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+volumes:
+  picobot-data:
+    driver: local
