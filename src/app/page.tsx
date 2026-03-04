@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import ArtifactPanel, { Artifact } from "@/components/ArtifactPanel";
 import WorkspaceModal from "@/components/WorkspaceModal";
@@ -54,6 +54,29 @@ export default function ChatPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
+  // Search capability detection
+  const [searchCapability, setSearchCapability] = useState<{
+    hasSearch: boolean;
+    provider: string;
+    confidence: string;
+    detail: string;
+    effectiveSearch: boolean;
+    override: boolean | null;
+  } | null>(null);
+  const [searchOverride, setSearchOverride] = useState<boolean | null>(null);
+
+  const refreshSearchCapability = useCallback(() => {
+    fetch('/api/search-capability')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.error) {
+          setSearchCapability(data);
+          setSearchOverride(data.override);
+        }
+      })
+      .catch(() => { });
+  }, []);
+
   // Close tools menu on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -99,12 +122,13 @@ export default function ChatPage() {
           }
         }
         setSettingsLoaded(true);
+        refreshSearchCapability();
       })
       .catch((err) => {
         console.error("Failed to load settings:", err);
         setSettingsLoaded(true);
       });
-  }, []);
+  }, [refreshSearchCapability]);
 
   const saveSettings = async () => {
     setSaveStatus("saving");
@@ -121,6 +145,7 @@ export default function ChatPage() {
         }),
       });
       setSaveStatus("saved");
+      refreshSearchCapability();
       setTimeout(() => setSaveStatus("idle"), 2000);
     } catch (err) {
       console.error("Failed to save settings:", err);
@@ -411,6 +436,117 @@ export default function ChatPage() {
                             className="form-input"
                             placeholder="google/gemini-2.5-flash"
                           />
+                        </div>
+                      </div>
+                    </div>
+
+                    <hr className="apple-divider" />
+
+                    {/* ── Search Capability Detection ── */}
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: searchCapability?.effectiveSearch ? '#34D399' : 'var(--text-tertiary)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8" />
+                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Search Capability</h2>
+                      </div>
+
+                      {/* Detection Status */}
+                      <div style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        marginBottom: '16px',
+                      }}>
+                        {searchCapability ? (
+                          <>
+                            <div className="flex items-center gap-2 mb-2">
+                              <span style={{
+                                display: 'inline-block',
+                                width: '8px',
+                                height: '8px',
+                                borderRadius: '50%',
+                                background: searchCapability.effectiveSearch ? '#34D399' : '#EF4444',
+                                boxShadow: searchCapability.effectiveSearch ? '0 0 6px #34D39966' : '0 0 6px #EF444466',
+                              }} />
+                              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {searchCapability.effectiveSearch ? 'Search Available' : 'No Search Detected'}
+                              </span>
+                              {searchCapability.confidence && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{
+                                  background: searchCapability.confidence === 'high' ? 'rgba(52,211,153,0.15)' :
+                                    searchCapability.confidence === 'medium' ? 'rgba(251,191,36,0.15)' : 'rgba(239,68,68,0.15)',
+                                  color: searchCapability.confidence === 'high' ? '#34D399' :
+                                    searchCapability.confidence === 'medium' ? '#FBB724' : '#EF4444',
+                                }}>
+                                  {searchCapability.confidence} confidence
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[12px]" style={{ color: 'var(--text-tertiary)', lineHeight: '1.5' }}>
+                              <strong style={{ color: 'var(--text-secondary)' }}>{searchCapability.provider}</strong> — {searchCapability.detail}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-[12px]" style={{ color: 'var(--text-tertiary)' }}>
+                            Save your LLM settings first, then detection will run automatically.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Manual Override Toggle */}
+                      <div className="flex items-center justify-between" style={{ padding: '8px 0' }}>
+                        <div>
+                          <p className="text-[13px] font-medium" style={{ color: 'var(--text-secondary)' }}>Prefer LLM Search</p>
+                          <p className="text-[11px]" style={{ color: 'var(--text-tertiary)', marginTop: '2px' }}>
+                            Override auto-detection — force PicoBot to use LLM search
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {searchOverride !== null && (
+                            <button
+                              onClick={async () => {
+                                setSearchOverride(null);
+                                await fetch('/api/search-capability', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ override: null }),
+                                });
+                                refreshSearchCapability();
+                              }}
+                              className="text-[10px] px-2 py-0.5 rounded"
+                              style={{ color: 'var(--text-tertiary)', background: 'rgba(255,255,255,0.05)' }}
+                            >
+                              Reset to Auto
+                            </button>
+                          )}
+                          <button
+                            onClick={async () => {
+                              const newVal = searchOverride === null ? true : !searchOverride;
+                              setSearchOverride(newVal);
+                              await fetch('/api/search-capability', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ override: newVal }),
+                              });
+                              refreshSearchCapability();
+                            }}
+                            className="relative w-11 h-6 rounded-full transition-colors duration-200"
+                            style={{
+                              background: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
+                                ? '#34D399' : 'rgba(255,255,255,0.1)',
+                            }}
+                          >
+                            <span
+                              className="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200"
+                              style={{
+                                transform: (searchOverride !== null ? searchOverride : searchCapability?.hasSearch)
+                                  ? 'translateX(20px)' : 'translateX(0)',
+                              }}
+                            />
+                          </button>
                         </div>
                       </div>
                     </div>
