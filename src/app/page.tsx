@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ArtifactPanel, { Artifact } from "@/components/ArtifactPanel";
@@ -72,6 +73,7 @@ function TableWithCanvas({ children, onOpenCanvas, tableProps }: { children: Rea
 }
 
 export default function ChatPage() {
+  const router = useRouter();
   const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, updateMessageInChat, deleteChat, compactChat } = useChat();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -165,6 +167,11 @@ export default function ChatPage() {
       .then((res) => res.json())
       .then((stored) => {
         if (stored && !stored.error) {
+          // Redirect to onboarding if API key is still the default placeholder
+          if (!stored.apiKey || stored.apiKey === "picobot-local") {
+            router.replace("/onboarding");
+            return;
+          }
           setSettings({
             openaiApiKey: stored.apiKey || "",
             openaiApiBase: stored.apiBaseUrl || "",
