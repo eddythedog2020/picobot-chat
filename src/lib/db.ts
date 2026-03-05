@@ -35,6 +35,12 @@ db.exec(`
     timestamp INTEGER NOT NULL,
     FOREIGN KEY(chatId) REFERENCES chats(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS memories (
+    id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    createdAt INTEGER NOT NULL
+  );
 `);
 
 // Insert default settings if undefined

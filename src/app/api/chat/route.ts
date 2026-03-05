@@ -8,17 +8,23 @@ import { detectSearchCapability } from "@/lib/searchDetection";
 const execFileAsync = promisify(execFile);
 
 export async function POST(req: NextRequest) {
-    const { message, history, compactedSummary } = await req.json();
+    const { message, history, compactedSummary, memories } = await req.json();
 
     if (!message) {
         return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
+    // Build persistent memories context
+    let memoriesContext = '';
+    if (memories) {
+        memoriesContext = `(System Note: The following are persistent user memories/preferences. Always keep these in mind when responding.)\n${memories}\n\n`;
+    }
+
     // Build conversation context from compacted summary or history
-    let conversationContext = '';
+    let conversationContext = memoriesContext;
     if (compactedSummary) {
         // Use the compacted summary as primary context
-        conversationContext = `(System Note: The following is a compacted summary of the earlier conversation. Use it to maintain continuity and understand references to earlier discussions.)\n\n${compactedSummary}\n\n`;
+        conversationContext += `(System Note: The following is a compacted summary of the earlier conversation. Use it to maintain continuity and understand references to earlier discussions.)\n\n${compactedSummary}\n\n`;
         // Also append any recent post-compaction messages
         if (history && Array.isArray(history) && history.length > 0) {
             const contextLines = history.map((msg: { role: string; content: string }) => {
@@ -40,7 +46,7 @@ export async function POST(req: NextRequest) {
                 : msg.content;
             return `${role}: ${content}`;
         });
-        conversationContext = `(System Note: Here is the conversation history for context. Use this to understand references like "the data", "that table", etc.)\n\n${contextLines.join('\n\n')}\n\n---\nCurrent message:\n`;
+        conversationContext += `(System Note: Here is the conversation history for context. Use this to understand references like "the data", "that table", etc.)\n\n${contextLines.join('\n\n')}\n\n---\nCurrent message:\n`;
     }
 
     // Read settings from SQLite (these are the user's preferred provider settings)

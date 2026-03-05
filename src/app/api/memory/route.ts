@@ -1,42 +1,46 @@
-import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import os from "os";
+import { NextRequest, NextResponse } from 'next/server';
+import db from '@/lib/db';
 
+// GET all memories
 export async function GET() {
     try {
-        const memoryDir = path.join(os.homedir(), ".picobot", "workspace", "memory");
+        const memories = db.prepare('SELECT * FROM memories ORDER BY createdAt DESC').all();
+        return NextResponse.json(memories);
+    } catch (error) {
+        console.error('Error fetching memories:', error);
+        return NextResponse.json({ error: 'Failed to fetch memories' }, { status: 500 });
+    }
+}
 
-        if (!fs.existsSync(memoryDir)) {
-            return NextResponse.json({ files: [] });
+// POST a new memory
+export async function POST(req: NextRequest) {
+    try {
+        const { content } = await req.json();
+        if (!content || !content.trim()) {
+            return NextResponse.json({ error: 'Content is required' }, { status: 400 });
         }
 
-        const entries = fs.readdirSync(memoryDir);
-        const files: { name: string; content: string; type: "soul" | "daily" }[] = [];
+        const id = Date.now().toString();
+        const createdAt = Date.now();
+        db.prepare('INSERT INTO memories (id, content, createdAt) VALUES (?, ?, ?)').run(id, content.trim(), createdAt);
+        return NextResponse.json({ id, content: content.trim(), createdAt });
+    } catch (error) {
+        console.error('Error saving memory:', error);
+        return NextResponse.json({ error: 'Failed to save memory' }, { status: 500 });
+    }
+}
 
-        for (const entry of entries) {
-            const fullPath = path.join(memoryDir, entry);
-            const stat = fs.statSync(fullPath);
-            if (!stat.isFile() || !entry.endsWith(".md")) continue;
-
-            const content = fs.readFileSync(fullPath, "utf-8");
-            const isDailyLog = /^\d{4}-\d{2}-\d{2}\.md$/.test(entry);
-
-            files.push({
-                name: entry,
-                content,
-                type: isDailyLog ? "daily" : "soul",
-            });
+// DELETE a memory by id (passed as query param)
+export async function DELETE(req: NextRequest) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const id = searchParams.get('id');
+        if (id) {
+            db.prepare('DELETE FROM memories WHERE id = ?').run(id);
         }
-
-        // Sort daily logs newest first
-        files.sort((a, b) => {
-            if (a.type !== b.type) return a.type === "soul" ? -1 : 1;
-            return b.name.localeCompare(a.name);
-        });
-
-        return NextResponse.json({ files });
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting memory:', error);
+        return NextResponse.json({ error: 'Failed to delete memory' }, { status: 500 });
     }
 }

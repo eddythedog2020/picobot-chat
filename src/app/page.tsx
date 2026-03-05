@@ -292,6 +292,75 @@ export default function ChatPage() {
       return;
     }
 
+    // Handle /remember command
+    if (userMsgContent.toLowerCase().startsWith('/remember')) {
+      const memoryContent = userMsgContent.slice(9).trim();
+      setInput("");
+
+      if (!memoryContent) {
+        const errMsg = { id: Date.now().toString(), role: "ai" as const, content: "💡 Usage: `/remember [fact to remember]`\n\nExample: `/remember I prefer TypeScript over JavaScript`" };
+        addMessageToChat(targetChatId, errMsg);
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/memory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: memoryContent }),
+        });
+        const data = await res.json();
+        if (data.id) {
+          const successMsg = { id: Date.now().toString(), role: "ai" as const, content: `🧠 **Remembered:** "${memoryContent}"\n\nI'll use this in all future conversations.` };
+          addMessageToChat(targetChatId, successMsg);
+        } else {
+          const errMsg = { id: Date.now().toString(), role: "ai" as const, content: "⚠️ Failed to save memory." };
+          addMessageToChat(targetChatId, errMsg);
+        }
+      } catch {
+        const errMsg = { id: Date.now().toString(), role: "ai" as const, content: "⚠️ Failed to save memory." };
+        addMessageToChat(targetChatId, errMsg);
+      }
+      return;
+    }
+
+    // Handle /recall command
+    if (userMsgContent.toLowerCase().startsWith('/recall')) {
+      const query = userMsgContent.slice(7).trim();
+      setInput("");
+
+      try {
+        const res = await fetch("/api/memory");
+        const memories = await res.json();
+
+        if (!Array.isArray(memories) || memories.length === 0) {
+          const msg = { id: Date.now().toString(), role: "ai" as const, content: "🧠 No memories stored yet. Use `/remember [fact]` to save something." };
+          addMessageToChat(targetChatId, msg);
+          return;
+        }
+
+        let filteredMemories = memories;
+        if (query) {
+          const queryLower = query.toLowerCase();
+          filteredMemories = memories.filter((m: { content: string }) =>
+            m.content.toLowerCase().includes(queryLower)
+          );
+        }
+
+        if (filteredMemories.length === 0) {
+          const msg = { id: Date.now().toString(), role: "ai" as const, content: `🧠 No memories found matching "${query}". Here are all ${memories.length} stored memories:\n\n${memories.map((m: { content: string }, i: number) => `${i + 1}. ${m.content}`).join('\n')}` };
+          addMessageToChat(targetChatId, msg);
+        } else {
+          const msg = { id: Date.now().toString(), role: "ai" as const, content: `🧠 **${query ? `Memories matching "${query}"` : 'All memories'}** (${filteredMemories.length}):\n\n${filteredMemories.map((m: { content: string }, i: number) => `${i + 1}. ${m.content}`).join('\n')}` };
+          addMessageToChat(targetChatId, msg);
+        }
+      } catch {
+        const errMsg = { id: Date.now().toString(), role: "ai" as const, content: "⚠️ Failed to recall memories." };
+        addMessageToChat(targetChatId, errMsg);
+      }
+      return;
+    }
+
     const userMsg = { id: Date.now().toString(), role: "user" as const, content: userMsgContent };
 
     addMessageToChat(targetChatId, userMsg);
@@ -316,6 +385,16 @@ export default function ChatPage() {
         history = allMessages;
       }
 
+      // Fetch persistent memories to inject as context
+      let memoriesContext: string | undefined;
+      try {
+        const memRes = await fetch("/api/memory");
+        const memories = await memRes.json();
+        if (Array.isArray(memories) && memories.length > 0) {
+          memoriesContext = memories.map((m: { content: string }) => `- ${m.content}`).join('\n');
+        }
+      } catch { /* ignore memory fetch errors */ }
+
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -323,6 +402,7 @@ export default function ChatPage() {
           message: userMsgContent,
           history,
           compactedSummary,
+          memories: memoriesContext,
           settings,
         }),
       });
@@ -330,6 +410,29 @@ export default function ChatPage() {
       const data = await res.json();
       const aiMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: data.response };
       addMessageToChat(targetChatId, aiMsg);
+
+      // Auto-compaction: trigger when messages exceed threshold
+      const AUTO_COMPACT_THRESHOLD = 25;
+      const KEEP_RECENT = 7;
+      const updatedChat = chats.find(c => c.id === targetChatId);
+      const totalMessages = (updatedChat?.messages?.length || 0) + 2; // +2 for userMsg + aiMsg just added
+      if (totalMessages > AUTO_COMPACT_THRESHOLD && !updatedChat?.compactedSummary) {
+        // Auto-compact in background (don't block the UI)
+        const allMsgs = [...(updatedChat?.messages || []), { role: "user", content: userMsgContent }, { role: "ai", content: data.response }];
+        const messagesToCompact = allMsgs.slice(0, allMsgs.length - KEEP_RECENT);
+        fetch("/api/compact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: messagesToCompact }),
+        }).then(r => r.json()).then(d => {
+          if (d.summary && targetChatId) {
+            const compactedAtIdx = allMsgs.length - KEEP_RECENT;
+            compactChat(targetChatId, d.summary, compactedAtIdx);
+            const notifyMsg = { id: (Date.now() + 2).toString(), role: "ai" as const, content: `🔄 **Auto-compacted.** ${messagesToCompact.length} older messages summarized to keep context efficient. Last ${KEEP_RECENT} messages kept in full.` };
+            addMessageToChat(targetChatId, notifyMsg);
+          }
+        }).catch(() => { /* silent fail for auto-compact */ });
+      }
 
       // Auto-open canvas for the first table or code block in the response
       const responseText = convertDelimitedToMarkdown(data.response || '');
