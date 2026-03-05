@@ -72,7 +72,7 @@ function TableWithCanvas({ children, onOpenCanvas, tableProps }: { children: Rea
 }
 
 export default function ChatPage() {
-  const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, deleteChat, compactChat } = useChat();
+  const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, updateMessageInChat, deleteChat, compactChat } = useChat();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
@@ -395,7 +395,7 @@ export default function ChatPage() {
         }
       } catch { /* ignore memory fetch errors */ }
 
-      const res = await fetch("/api/chat", {
+      const res = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -407,18 +407,57 @@ export default function ChatPage() {
         }),
       });
 
-      const data = await res.json();
-      const aiMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: data.response };
+      // Stream the response via SSE
+      const aiMsgId = (Date.now() + 1).toString();
+      const aiMsg = { id: aiMsgId, role: "ai" as const, content: "" };
       addMessageToChat(targetChatId, aiMsg);
+
+      let fullResponse = '';
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const payload = line.slice(6).trim();
+              if (payload === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(payload);
+                if (parsed.token) {
+                  fullResponse += parsed.token;
+                  updateMessageInChat(targetChatId, aiMsgId, fullResponse);
+                }
+              } catch { /* skip malformed SSE lines */ }
+            }
+          }
+        }
+      }
+
+      // Persist the final message to DB
+      if (fullResponse) {
+        fetch(`/api/chats/${targetChatId}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: aiMsgId, role: "ai", content: fullResponse, timestamp: Date.now() }),
+        });
+      }
 
       // Auto-compaction: trigger when messages exceed threshold
       const AUTO_COMPACT_THRESHOLD = 25;
       const KEEP_RECENT = 7;
       const updatedChat = chats.find(c => c.id === targetChatId);
-      const totalMessages = (updatedChat?.messages?.length || 0) + 2; // +2 for userMsg + aiMsg just added
+      const totalMessages = (updatedChat?.messages?.length || 0) + 2;
       if (totalMessages > AUTO_COMPACT_THRESHOLD && !updatedChat?.compactedSummary) {
-        // Auto-compact in background (don't block the UI)
-        const allMsgs = [...(updatedChat?.messages || []), { role: "user", content: userMsgContent }, { role: "ai", content: data.response }];
+        const allMsgs = [...(updatedChat?.messages || []), { role: "user", content: userMsgContent }, { role: "ai", content: fullResponse }];
         const messagesToCompact = allMsgs.slice(0, allMsgs.length - KEEP_RECENT);
         fetch("/api/compact", {
           method: "POST",
@@ -435,17 +474,15 @@ export default function ChatPage() {
       }
 
       // Auto-open canvas for the first table or code block in the response
-      const responseText = convertDelimitedToMarkdown(data.response || '');
+      const responseText = convertDelimitedToMarkdown(fullResponse || '');
       // Check for markdown tables (lines starting with |)
       const tableMatch = responseText.match(/(?:^[ \t]*\|.+\|[ \t]*$\n?){3,}/m);
       if (tableMatch) {
-        // Parse the matched table block into proper markdown
         const tableLines = tableMatch[0].split('\n').filter((l: string) => l.trim().startsWith('|'));
         if (tableLines.length >= 2) {
           setActiveArtifact({ type: 'table' as any, content: tableLines.join('\n'), language: 'markdown', title: 'Table', id: Date.now().toString() });
         }
       } else {
-        // Check for fenced code blocks (handling unclosed blocks at the end of response)
         const codeMatch = responseText.match(/```[ \t]*(\w+)?[ \t]*\n([\s\S]*?)(?:```|$)/);
         if (codeMatch) {
           setActiveArtifact({ type: 'code', content: codeMatch[2].replace(/\n$/, ''), language: codeMatch[1] || 'text', title: 'Generated Code', id: Date.now().toString() });

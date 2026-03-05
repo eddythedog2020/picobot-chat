@@ -17,7 +17,7 @@ export async function POST(request: Request, context: any) {
         const { id: chatId } = await Promise.resolve(context.params);
         const { id, role, content, timestamp } = await request.json();
 
-        db.prepare('INSERT INTO messages (id, chatId, role, content, timestamp) VALUES (?, ?, ?, ?, ?)').run(
+        db.prepare('INSERT OR REPLACE INTO messages (id, chatId, role, content, timestamp) VALUES (?, ?, ?, ?, ?)').run(
             id, chatId, role, content, timestamp
         );
 

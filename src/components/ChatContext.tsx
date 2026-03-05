@@ -23,6 +23,7 @@ type ChatContextType = {
   setActiveChatId: (id: string | null) => void;
   createChat: () => string;
   addMessageToChat: (chatId: string, message: Message) => void;
+  updateMessageInChat: (chatId: string, messageId: string, content: string) => void;
   deleteChat: (chatId: string) => void;
   compactChat: (chatId: string, summary: string, atIndex: number) => void;
 };
@@ -140,6 +141,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const updateMessageInChat = (chatId: string, messageId: string, content: string) => {
+    setChats((prev) => {
+      return prev.map((chat) => {
+        if (chat.id === chatId) {
+          return {
+            ...chat,
+            messages: chat.messages.map((msg) =>
+              msg.id === messageId ? { ...msg, content } : msg
+            ),
+          };
+        }
+        return chat;
+      });
+    });
+  };
+
   const compactChat = (chatId: string, summary: string, atIndex: number) => {
     // Persist to DB
     fetch(`/api/chats/${chatId}`, {
@@ -181,6 +198,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         setActiveChatId,
         createChat,
         addMessageToChat,
+        updateMessageInChat,
         deleteChat,
         compactChat,
       }}
