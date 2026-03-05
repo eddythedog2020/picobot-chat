@@ -86,9 +86,11 @@ export default function ChatPage() {
   const [showTasks, setShowTasks] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [pendingImages, setPendingImages] = useState<{ file: File, preview: string }[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const speechRecRef = useRef<any>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Shuffle and pick 4 suggestions whenever the active chat changes
   const visibleSuggestions = useMemo<Suggestion[]>(() => {
@@ -361,7 +363,24 @@ export default function ChatPage() {
       return;
     }
 
-    const userMsg = { id: Date.now().toString(), role: "user" as const, content: userMsgContent };
+    // Convert pending images to base64 data URLs before creating the message
+    const imageDataUrls: string[] = [];
+    for (const img of pendingImages) {
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(img.file);
+      });
+      imageDataUrls.push(dataUrl);
+    }
+    // Clear pending images
+    pendingImages.forEach(img => URL.revokeObjectURL(img.preview));
+    setPendingImages([]);
+
+    const userMsg: any = { id: Date.now().toString(), role: "user" as const, content: userMsgContent };
+    if (imageDataUrls.length > 0) {
+      userMsg.images = imageDataUrls;
+    }
 
     addMessageToChat(targetChatId, userMsg);
     setInput("");
@@ -395,16 +414,23 @@ export default function ChatPage() {
         }
       } catch { /* ignore memory fetch errors */ }
 
-      const res = await fetch("/api/chat", {
+      // Route to vision endpoint if images attached, otherwise picobot
+      const endpoint = imageDataUrls.length > 0 ? "/api/chat/vision" : "/api/chat";
+      const payload: any = {
+        message: userMsgContent,
+        history,
+        compactedSummary,
+        memories: memoriesContext,
+        settings,
+      };
+      if (imageDataUrls.length > 0) {
+        payload.images = imageDataUrls;
+      }
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: userMsgContent,
-          history,
-          compactedSummary,
-          memories: memoriesContext,
-          settings,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -1105,6 +1131,27 @@ export default function ChatPage() {
                           ) : (
                             msg.content.replace(/PicoBot/g, botName)
                           )}
+                          {/* Inline images for user messages */}
+                          {msg.images && msg.images.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+                              {msg.images.map((imgSrc: string, imgIdx: number) => (
+                                <img
+                                  key={imgIdx}
+                                  src={imgSrc}
+                                  alt={`Attached image ${imgIdx + 1}`}
+                                  style={{
+                                    maxWidth: '200px',
+                                    maxHeight: '200px',
+                                    borderRadius: '8px',
+                                    objectFit: 'cover',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    cursor: 'pointer',
+                                  }}
+                                  onClick={() => window.open(imgSrc, '_blank')}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1152,12 +1199,92 @@ export default function ChatPage() {
                     display: 'flex',
                     flexDirection: 'column',
                   }}>
+                    {/* Hidden file input for image upload */}
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        const newImages = files.map(file => ({
+                          file,
+                          preview: URL.createObjectURL(file),
+                        }));
+                        setPendingImages(prev => [...prev, ...newImages]);
+                        e.target.value = ''; // reset so same file can be selected again
+                      }}
+                    />
+                    {/* Image preview strip */}
+                    {pendingImages.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                        padding: '12px 20px 4px 20px',
+                      }}>
+                        {pendingImages.map((img, idx) => (
+                          <div key={idx} style={{ position: 'relative', display: 'inline-block' }}>
+                            <img
+                              src={img.preview}
+                              alt={`Upload ${idx + 1}`}
+                              style={{
+                                width: '64px',
+                                height: '64px',
+                                borderRadius: '8px',
+                                objectFit: 'cover',
+                                border: '1px solid rgba(255,255,255,0.15)',
+                              }}
+                            />
+                            <button
+                              onClick={() => {
+                                URL.revokeObjectURL(img.preview);
+                                setPendingImages(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                width: '20px',
+                                height: '20px',
+                                borderRadius: '50%',
+                                background: '#333',
+                                border: '1px solid rgba(255,255,255,0.2)',
+                                color: 'rgba(255,255,255,0.8)',
+                                fontSize: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                lineHeight: 1,
+                                padding: 0,
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {/* Row 1: Textarea */}
                     <textarea
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder={`Message ${botName}...`}
+                      onPaste={(e) => {
+                        const items = Array.from(e.clipboardData?.items || []);
+                        const imageItems = items.filter(item => item.type.startsWith('image/'));
+                        if (imageItems.length > 0) {
+                          e.preventDefault();
+                          const newImages = imageItems.map(item => {
+                            const file = item.getAsFile()!;
+                            return { file, preview: URL.createObjectURL(file) };
+                          });
+                          setPendingImages(prev => [...prev, ...newImages]);
+                        }
+                      }}
+                      placeholder={pendingImages.length > 0 ? `Describe what you want to know about the image(s)...` : `Message ${botName}...`}
                       rows={1}
                       disabled={isLoading}
                       style={{
@@ -1183,6 +1310,32 @@ export default function ChatPage() {
                       padding: '8px 12px 10px 12px',
                       gap: '4px',
                     }}>
+                      {/* Image upload button */}
+                      <button
+                        onClick={() => imageInputRef.current?.click()}
+                        title="Attach image"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          background: pendingImages.length > 0 ? 'rgba(99,102,241,0.15)' : 'transparent',
+                          color: pendingImages.length > 0 ? 'rgba(129,140,248,1)' : 'rgba(255,255,255,0.65)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          padding: 0,
+                          flexShrink: 0,
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = pendingImages.length > 0 ? 'rgba(99,102,241,0.15)' : 'transparent')}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M15.621 4.379a3 3 0 00-4.242 0l-7 7a3 3 0 004.241 4.243h.001l.497-.5a.75.75 0 011.064 1.057l-.498.501-.002.002a4.5 4.5 0 01-6.364-6.364l7-7a4.5 4.5 0 016.368 6.36l-3.455 3.553A2.625 2.625 0 119.52 9.52l3.45-3.451a.75.75 0 111.061 1.06l-3.45 3.451a1.125 1.125 0 001.587 1.595l3.454-3.553a3 3 0 000-4.242z" clipRule="evenodd" />
+                        </svg>
+                      </button>
                       {/* Tools button with popup */}
                       <div ref={toolsMenuRef} style={{ position: 'relative' }}>
                         <button
