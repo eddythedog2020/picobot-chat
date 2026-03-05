@@ -16,6 +16,10 @@ function readPicobotConfig() {
 
 function writePicobotConfig(config: Record<string, unknown>) {
     try {
+        const dir = path.dirname(PICOBOT_CONFIG_PATH);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
         fs.writeFileSync(PICOBOT_CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
     } catch (e) {
         console.error('Failed to write PicoBot config.json:', e);
