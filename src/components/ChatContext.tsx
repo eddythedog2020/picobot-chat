@@ -13,6 +13,8 @@ export type ChatSession = {
   title: string;
   messages: Message[];
   updatedAt: number;
+  compactedSummary?: string | null;
+  compactedAtIndex?: number | null;
 };
 
 type ChatContextType = {
@@ -22,6 +24,7 @@ type ChatContextType = {
   createChat: () => string;
   addMessageToChat: (chatId: string, message: Message) => void;
   deleteChat: (chatId: string) => void;
+  compactChat: (chatId: string, summary: string, atIndex: number) => void;
 };
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -77,6 +80,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         { id: Date.now().toString(), role: "ai", content: `Hello! I'm ${botName}. How can I help you today?` }
       ],
       updatedAt: Date.now(),
+      compactedSummary: null,
+      compactedAtIndex: null,
     };
 
     fetch("/api/chats", {
@@ -135,6 +140,24 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const compactChat = (chatId: string, summary: string, atIndex: number) => {
+    // Persist to DB
+    fetch(`/api/chats/${chatId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ compactedSummary: summary, compactedAtIndex: atIndex, updatedAt: Date.now() }),
+    });
+
+    // Update in-memory state
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId
+          ? { ...chat, compactedSummary: summary, compactedAtIndex: atIndex, updatedAt: Date.now() }
+          : chat
+      )
+    );
+  };
+
   const deleteChat = (chatId: string) => {
     fetch(`/api/chats/${chatId}`, { method: "DELETE" });
     setChats((prev) => {
@@ -159,6 +182,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         createChat,
         addMessageToChat,
         deleteChat,
+        compactChat,
       }}
     >
       {children}

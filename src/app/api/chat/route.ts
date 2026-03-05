@@ -8,20 +8,35 @@ import { detectSearchCapability } from "@/lib/searchDetection";
 const execFileAsync = promisify(execFile);
 
 export async function POST(req: NextRequest) {
-    const { message, history } = await req.json();
+    const { message, history, compactedSummary } = await req.json();
 
     if (!message) {
         return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    // Build conversation context from history
+    // Build conversation context from compacted summary or history
     let conversationContext = '';
-    if (history && Array.isArray(history) && history.length > 0) {
+    if (compactedSummary) {
+        // Use the compacted summary as primary context
+        conversationContext = `(System Note: The following is a compacted summary of the earlier conversation. Use it to maintain continuity and understand references to earlier discussions.)\n\n${compactedSummary}\n\n`;
+        // Also append any recent post-compaction messages
+        if (history && Array.isArray(history) && history.length > 0) {
+            const contextLines = history.map((msg: { role: string; content: string }) => {
+                const role = msg.role === 'user' ? 'User' : 'Assistant';
+                const content = msg.role === 'ai' && msg.content.length > 800
+                    ? msg.content.substring(0, 800) + '...[truncated]'
+                    : msg.content;
+                return `${role}: ${content}`;
+            });
+            conversationContext += `(Recent messages since compaction:)\n\n${contextLines.join('\n\n')}\n\n---\nCurrent message:\n`;
+        } else {
+            conversationContext += `---\nCurrent message:\n`;
+        }
+    } else if (history && Array.isArray(history) && history.length > 0) {
         const contextLines = history.map((msg: { role: string; content: string }) => {
             const role = msg.role === 'user' ? 'User' : 'Assistant';
-            // Truncate long assistant messages to keep context manageable
-            const content = msg.role === 'ai' && msg.content.length > 500
-                ? msg.content.substring(0, 500) + '...[truncated]'
+            const content = msg.role === 'ai' && msg.content.length > 800
+                ? msg.content.substring(0, 800) + '...[truncated]'
                 : msg.content;
             return `${role}: ${content}`;
         });

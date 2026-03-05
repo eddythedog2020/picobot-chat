@@ -72,9 +72,10 @@ function TableWithCanvas({ children, onOpenCanvas, tableProps }: { children: Rea
 }
 
 export default function ChatPage() {
-  const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, deleteChat } = useChat();
+  const { chats, activeChatId, setActiveChatId, createChat, addMessageToChat, deleteChat, compactChat } = useChat();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isCompacting, setIsCompacting] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [activeArtifact, setActiveArtifact] = useState<Artifact | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -227,7 +228,7 @@ export default function ChatPage() {
   }, [activeChatId]);
 
   const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isCompacting) return;
 
     let targetChatId = activeChatId;
 
@@ -236,6 +237,55 @@ export default function ChatPage() {
     }
 
     const userMsgContent = input.trim();
+
+    // Handle /compact command
+    if (userMsgContent.toLowerCase().startsWith('/compact')) {
+      const customPrompt = userMsgContent.slice(8).trim() || undefined;
+      setInput("");
+      setIsCompacting(true);
+
+      const currentChat = chats.find(c => c.id === targetChatId);
+      const allMessages = currentChat?.messages || [];
+
+      // Need at least a few messages to compact
+      if (allMessages.length < 4) {
+        const errMsg = { id: Date.now().toString(), role: "ai" as const, content: "📋 Not enough conversation history to compact. Keep chatting and try again later!" };
+        addMessageToChat(targetChatId, errMsg);
+        setIsCompacting(false);
+        return;
+      }
+
+      // Show compacting message
+      const compactingMsg = { id: Date.now().toString(), role: "ai" as const, content: "📋 Compacting conversation history..." };
+      addMessageToChat(targetChatId, compactingMsg);
+
+      try {
+        const res = await fetch("/api/compact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: allMessages, customPrompt }),
+        });
+        const data = await res.json();
+
+        if (data.summary) {
+          // Store the compaction — atIndex is the current message count
+          compactChat(targetChatId, data.summary, allMessages.length + 1); // +1 for the compacting msg
+
+          const successMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: `✅ **Context compacted.** ${allMessages.length} messages summarized into a compact context.\n\nI'll use this summary for future messages in this chat. You can keep chatting normally — I remember everything important from our conversation.` };
+          addMessageToChat(targetChatId, successMsg);
+        } else {
+          const errMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: "⚠️ Compaction failed. Try again later." };
+          addMessageToChat(targetChatId, errMsg);
+        }
+      } catch {
+        const errMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: "⚠️ Failed to compact conversation." };
+        addMessageToChat(targetChatId, errMsg);
+      } finally {
+        setIsCompacting(false);
+      }
+      return;
+    }
+
     const userMsg = { id: Date.now().toString(), role: "user" as const, content: userMsgContent };
 
     addMessageToChat(targetChatId, userMsg);
@@ -245,14 +295,28 @@ export default function ChatPage() {
     try {
       // Get current conversation history for context
       const currentChat = chats.find(c => c.id === targetChatId);
-      const history = currentChat?.messages || [];
+      const allMessages = currentChat?.messages || [];
+
+      // Build history: if compacted, send summary + post-compaction messages only
+      let history: any[] = [];
+      let compactedSummary: string | undefined;
+
+      if (currentChat?.compactedSummary && currentChat?.compactedAtIndex) {
+        compactedSummary = currentChat.compactedSummary;
+        // Send only messages after the compaction point
+        history = allMessages.slice(currentChat.compactedAtIndex);
+      } else {
+        // No compaction — send all messages
+        history = allMessages;
+      }
 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userMsgContent,
-          history: history.slice(-20), // last 20 messages for context
+          history,
+          compactedSummary,
           settings,
         }),
       });
@@ -913,7 +977,7 @@ export default function ChatPage() {
                     ))}
 
                     {/* Loading indicator */}
-                    {isLoading && (
+                    {(isLoading || isCompacting) && (
                       <div className="message ai">
                         <div className="message-avatar">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4" style={{ color: 'var(--text-secondary)' }}>
@@ -1262,22 +1326,22 @@ export default function ChatPage() {
                       </button>
                       <button
                         onClick={sendMessage}
-                        disabled={!input.trim() || isLoading}
+                        disabled={!input.trim() || isLoading || isCompacting}
                         style={{
                           width: '36px',
                           height: '36px',
                           borderRadius: '50%',
-                          background: (!input.trim() || isLoading) ? 'rgba(255,255,255,0.1)' : '#0a84ff',
+                          background: (!input.trim() || isLoading || isCompacting) ? 'rgba(255,255,255,0.1)' : '#0a84ff',
                           color: 'white',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           border: 'none',
-                          cursor: (!input.trim() || isLoading) ? 'not-allowed' : 'pointer',
+                          cursor: (!input.trim() || isLoading || isCompacting) ? 'not-allowed' : 'pointer',
                           flexShrink: 0,
                           transition: 'all 0.2s ease',
-                          boxShadow: (!input.trim() || isLoading) ? 'none' : '0 2px 10px rgba(10,132,255,0.3)',
-                          opacity: (!input.trim() || isLoading) ? 0.4 : 1,
+                          boxShadow: (!input.trim() || isLoading || isCompacting) ? 'none' : '0 2px 10px rgba(10,132,255,0.3)',
+                          opacity: (!input.trim() || isLoading || isCompacting) ? 0.4 : 1,
                         }}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" style={{ width: 16, height: 16 }}>

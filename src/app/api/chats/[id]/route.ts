@@ -17,12 +17,17 @@ export async function PATCH(request: Request, context: any) {
         const { id } = await Promise.resolve(context.params);
         const body = await request.json();
 
-        if (body.title && body.updatedAt) {
-            db.prepare('UPDATE chats SET title = ?, updatedAt = ? WHERE id = ?').run(body.title, body.updatedAt, id);
-        } else if (body.title) {
-            db.prepare('UPDATE chats SET title = ? WHERE id = ?').run(body.title, id);
-        } else if (body.updatedAt) {
-            db.prepare('UPDATE chats SET updatedAt = ? WHERE id = ?').run(body.updatedAt, id);
+        const updates: string[] = [];
+        const values: any[] = [];
+
+        if (body.title !== undefined) { updates.push('title = ?'); values.push(body.title); }
+        if (body.updatedAt !== undefined) { updates.push('updatedAt = ?'); values.push(body.updatedAt); }
+        if (body.compactedSummary !== undefined) { updates.push('compactedSummary = ?'); values.push(body.compactedSummary); }
+        if (body.compactedAtIndex !== undefined) { updates.push('compactedAtIndex = ?'); values.push(body.compactedAtIndex); }
+
+        if (updates.length > 0) {
+            values.push(id);
+            db.prepare(`UPDATE chats SET ${updates.join(', ')} WHERE id = ?`).run(...values);
         }
 
         return NextResponse.json({ success: true });

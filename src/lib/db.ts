@@ -5,7 +5,7 @@ import fs from 'fs';
 // Ensure the data directory exists
 const dataDir = path.join(process.cwd(), 'data');
 if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.join(dataDir, 'picobot.db');
@@ -40,11 +40,16 @@ db.exec(`
 // Insert default settings if undefined
 const defaultSettings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
 if (!defaultSettings) {
-    db.prepare('INSERT INTO settings (id, apiBaseUrl, apiKey, defaultModel) VALUES (1, ?, ?, ?)').run(
-        'http://localhost:11434/v1',
-        'picobot-local',
-        'llama3'
-    );
+  db.prepare('INSERT INTO settings (id, apiBaseUrl, apiKey, defaultModel) VALUES (1, ?, ?, ?)').run(
+    'http://localhost:11434/v1',
+    'picobot-local',
+    'llama3'
+  );
 }
+
+// Migrations: add columns safely
+try { db.exec(`ALTER TABLE chats ADD COLUMN compactedSummary TEXT`); } catch { /* already exists */ }
+try { db.exec(`ALTER TABLE chats ADD COLUMN compactedAtIndex INTEGER`); } catch { /* already exists */ }
+try { db.exec(`ALTER TABLE settings ADD COLUMN preferLlmSearch INTEGER`); } catch { /* already exists */ }
 
 export default db;
