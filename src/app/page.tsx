@@ -520,7 +520,7 @@ export default function ChatPage() {
 
               // Follow-up LLM call to interpret the result
               const followUpPayload = {
-                message: `The code execution finished. Here is the output:\n\n${outputText.trim()}\n\nExit code: ${execData.exitCode}\n\nPlease interpret this result for the user. If the task succeeded, confirm it. If there were errors, explain what went wrong and suggest a fix.`,
+                message: `The code execution finished. Here is the output:\n\n${outputText.trim()}\n\nExit code: ${execData.exitCode}\n\nPlease interpret this result for the user. If the task succeeded, confirm it. If there were errors, explain what went wrong and suggest a fix. IMPORTANT: Do NOT generate any python:run code blocks in this response — just summarize and interpret the results in plain text.`,
                 history: [
                   ...(activeChat?.messages || []).slice(-8).map(m => ({ role: m.role, content: m.content })),
                   { role: "ai", content: fullResponse },
