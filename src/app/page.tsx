@@ -416,8 +416,8 @@ export default function ChatPage() {
       addMessageToChat(targetChatId, aiMsg);
 
       // Typewriter effect: reveal tokens progressively
-      const CHARS_PER_TICK = 3;
-      const TICK_MS = 12;
+      const CHARS_PER_TICK = 12;
+      const TICK_MS = 8;
       let charIndex = 0;
 
       await new Promise<void>((resolve) => {
