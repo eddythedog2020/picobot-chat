@@ -337,29 +337,23 @@ class MCPManager {
             const reconstructedArgs = reconstructSelectSchema(mapping, args);
             console.log(`[MCP] Simplified tool "${qualifiedName}" → original "${mapping.originalToolName}" operation="${mapping.operation}"`);
 
-            // For deploy-site: ensure .netlify/state.json exists with a valid siteId.
-            // If no siteId is provided, auto-create a Netlify project first.
+            // For deploy-site: Use Netlify API directly for file uploads.
+            // The MCP deploy-site triggers a build pipeline that doesn't upload local files.
             if (mapping.operation === 'deploy-site' && args.deployDirectory) {
                 const deployDir = String(args.deployDirectory);
                 const path = await import('path');
                 const fs = await import('fs');
-                const netlifyDir = path.join(deployDir, '.netlify');
-                const stateFile = path.join(netlifyDir, 'state.json');
+                const crypto = await import('crypto');
 
-                // Ensure .netlify directory exists
-                if (!fs.existsSync(netlifyDir)) {
-                    fs.mkdirSync(netlifyDir, { recursive: true });
+                // Get the Netlify auth token from settings
+                const settings = db.prepare('SELECT netlifyToken FROM settings WHERE id = 1').get() as { netlifyToken?: string } | undefined;
+                const netlifyToken = settings?.netlifyToken;
+                if (!netlifyToken) {
+                    return JSON.stringify({ error: 'No Netlify auth token configured. Please set your Netlify token in Settings.' });
                 }
 
-                // Check if we need to create a project (no siteId provided and no existing state)
+                // Get or create siteId
                 let siteId = args.siteId as string | undefined;
-                if (!siteId) {
-                    try {
-                        const existing = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
-                        if (existing.siteId) siteId = existing.siteId;
-                    } catch { /* file doesn't exist or is invalid */ }
-                }
-
                 if (!siteId) {
                     // Auto-create a Netlify project to get a siteId
                     const siteName = path.basename(deployDir) + '-' + Date.now();
@@ -378,29 +372,23 @@ class MCPManager {
                                 },
                             });
 
-                            // Extract siteId from create result
                             if (createResult.content && Array.isArray(createResult.content)) {
                                 const text = createResult.content
                                     .filter((c: { type: string }) => c.type === 'text')
                                     .map((c: { type: string; text?: string }) => c.text || '')
                                     .join('');
 
-                                // The Netlify MCP returns double-encoded JSON:
-                                // text = '"{\"rawToolResponse\":[{\"id\":\"uuid\"}]}"'
-                                // First JSON.parse gives a string, second gives the object
                                 try {
                                     let parsed: any = JSON.parse(text);
                                     if (typeof parsed === 'string') {
                                         parsed = JSON.parse(parsed);
                                     }
-                                    // siteId is in rawToolResponse[0].id or rawToolResponse[0].site_id
                                     if (parsed.rawToolResponse && Array.isArray(parsed.rawToolResponse)) {
                                         siteId = parsed.rawToolResponse[0]?.id || parsed.rawToolResponse[0]?.site_id;
                                     }
                                     siteId = siteId || parsed.id || parsed.siteId || parsed.site_id;
                                     console.log(`[MCP] Auto-created project: ${siteName}, siteId: ${siteId}`);
                                 } catch {
-                                    // Regex fallback: find UUID in the raw text
                                     const uuidMatch = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/);
                                     if (uuidMatch) {
                                         siteId = uuidMatch[0];
@@ -414,14 +402,100 @@ class MCPManager {
                     }
                 }
 
-                // Write state.json with siteId
-                if (siteId) {
-                    fs.writeFileSync(stateFile, JSON.stringify({ siteId }));
-                    console.log(`[MCP] Wrote state.json with siteId: ${siteId}`);
-                } else {
-                    // Write empty state so the file at least exists
-                    fs.writeFileSync(stateFile, JSON.stringify({}));
-                    console.log(`[MCP] Warning: No siteId obtained, deploy may fail`);
+                if (!siteId) {
+                    return JSON.stringify({ error: 'Could not create or find a Netlify site to deploy to.' });
+                }
+
+                // Scan deploy directory for files and compute SHA1 hashes
+                const files: { path: string; hash: string; content: Buffer }[] = [];
+                const scanDir = (dir: string, prefix: string = '') => {
+                    const entries = fs.readdirSync(dir, { withFileTypes: true });
+                    for (const entry of entries) {
+                        if (entry.name === '.netlify' || entry.name === 'node_modules') continue;
+                        const fullPath = path.join(dir, entry.name);
+                        const relativePath = prefix ? `${prefix}/${entry.name}` : `/${entry.name}`;
+                        if (entry.isDirectory()) {
+                            scanDir(fullPath, prefix ? `${prefix}/${entry.name}` : `/${entry.name}`);
+                        } else {
+                            const content = fs.readFileSync(fullPath);
+                            const hash = crypto.createHash('sha1').update(content).digest('hex');
+                            files.push({ path: relativePath, hash, content });
+                        }
+                    }
+                };
+
+                try {
+                    scanDir(deployDir);
+                } catch (e) {
+                    return JSON.stringify({ error: `Could not scan deploy directory: ${e}` });
+                }
+
+                console.log(`[MCP] Deploying ${files.length} files to Netlify site ${siteId}`);
+                for (const f of files) {
+                    console.log(`  - ${f.path} (${f.content.length} bytes, sha1: ${f.hash})`);
+                }
+
+                // Create deploy with file manifest
+                const fileHashes: Record<string, string> = {};
+                for (const f of files) {
+                    fileHashes[f.path] = f.hash;
+                }
+
+                try {
+                    const createDeployRes = await fetch(`https://api.netlify.com/api/v1/sites/${siteId}/deploys`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${netlifyToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ files: fileHashes }),
+                    });
+
+                    if (!createDeployRes.ok) {
+                        const errText = await createDeployRes.text();
+                        return JSON.stringify({ error: `Netlify deploy creation failed (${createDeployRes.status}): ${errText}` });
+                    }
+
+                    const deployData = await createDeployRes.json() as { id: string; required: string[]; ssl_url?: string; url?: string; name?: string };
+                    const deployId = deployData.id;
+                    const requiredFiles = deployData.required || [];
+                    console.log(`[MCP] Deploy ${deployId} created. ${requiredFiles.length} files need uploading.`);
+
+                    // Upload required files
+                    for (const hashNeeded of requiredFiles) {
+                        const file = files.find(f => f.hash === hashNeeded);
+                        if (!file) continue;
+
+                        console.log(`[MCP] Uploading ${file.path}...`);
+                        const uploadRes = await fetch(`https://api.netlify.com/api/v1/deploys/${deployId}/files${file.path}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `Bearer ${netlifyToken}`,
+                                'Content-Type': 'application/octet-stream',
+                            },
+                            body: new Uint8Array(file.content),
+                        });
+
+                        if (!uploadRes.ok) {
+                            console.error(`[MCP] Failed to upload ${file.path}: ${uploadRes.status}`);
+                        }
+                    }
+
+                    const siteUrl = deployData.ssl_url || deployData.url || `https://${deployData.name || siteId}.netlify.app`;
+                    console.log(`[MCP] Deploy complete! URL: ${siteUrl}`);
+
+                    return JSON.stringify({
+                        success: true,
+                        siteId,
+                        deployId,
+                        url: siteUrl,
+                        filesDeployed: files.length,
+                        message: `Successfully deployed ${files.length} files to Netlify. Live URL: ${siteUrl}`,
+                    });
+                } catch (e: unknown) {
+                    const message = e instanceof Error ? e.message : String(e);
+                    console.error(`[MCP] Netlify API deploy failed:`, message);
+                    return JSON.stringify({ error: `Netlify deploy failed: ${message}` });
                 }
             }
 
