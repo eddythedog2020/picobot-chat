@@ -2,19 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { validateAuth } from "@/lib/authMiddleware";
 
-const WORKSPACE = path.join(os.homedir(), ".picobot", "workspace");
+const WORKSPACE = path.resolve(path.join(os.homedir(), ".picobot", "workspace"));
 
 export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     const filePath = req.nextUrl.searchParams.get("path");
     if (!filePath) {
         return NextResponse.json({ error: "Missing path parameter" }, { status: 400 });
     }
 
-    const fullPath = path.join(WORKSPACE, filePath);
+    // Reject obviously malicious paths
+    if (filePath.includes('\0') || filePath.includes('..')) {
+        return NextResponse.json({ error: "Access denied" }, { status: 403 });
+    }
+
+    const fullPath = path.resolve(path.join(WORKSPACE, filePath));
 
     // Security: ensure the resolved path is within the workspace
-    if (!fullPath.startsWith(WORKSPACE)) {
+    if (!fullPath.startsWith(WORKSPACE + path.sep) && fullPath !== WORKSPACE) {
         return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 

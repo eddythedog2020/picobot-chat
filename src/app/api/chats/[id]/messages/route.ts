@@ -1,7 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { validateAuth } from '@/lib/authMiddleware';
 
-export async function GET(request: Request, context: any) {
+export async function GET(request: NextRequest, context: any) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const { id: chatId } = await Promise.resolve(context.params);
         const messages = db.prepare('SELECT * FROM messages WHERE chatId = ? ORDER BY timestamp ASC').all(chatId) as any[];
@@ -17,7 +21,10 @@ export async function GET(request: Request, context: any) {
     }
 }
 
-export async function POST(request: Request, context: any) {
+export async function POST(request: NextRequest, context: any) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const { id: chatId } = await Promise.resolve(context.params);
         const { id, role, content, images, timestamp } = await request.json();

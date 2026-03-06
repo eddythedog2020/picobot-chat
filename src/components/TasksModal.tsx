@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 type Task = {
     id: string;
@@ -47,7 +48,7 @@ export default function TasksModal({ isOpen, onClose }: Props) {
 
     const fetchTasks = () => {
         setLoading(true);
-        fetch("/api/tasks")
+        authFetch("/api/tasks")
             .then((r) => r.json())
             .then((d) => { setTasks(d.tasks || []); setLoading(false); })
             .catch(() => setLoading(false));
@@ -59,7 +60,7 @@ export default function TasksModal({ isOpen, onClose }: Props) {
 
     const addTask = async () => {
         if (!newText.trim()) return;
-        await fetch("/api/tasks", {
+        await authFetch("/api/tasks", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: newText.trim(), category: newCat }),
@@ -69,7 +70,7 @@ export default function TasksModal({ isOpen, onClose }: Props) {
     };
 
     const toggleTask = async (id: string, done: boolean) => {
-        await fetch("/api/tasks", {
+        await authFetch("/api/tasks", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id, done: !done }),
@@ -78,7 +79,7 @@ export default function TasksModal({ isOpen, onClose }: Props) {
     };
 
     const deleteTask = async (id: string) => {
-        await fetch(`/api/tasks?id=${id}`, { method: "DELETE" });
+        await authFetch(`/api/tasks?id=${id}`, { method: "DELETE" });
         fetchTasks();
     };
 

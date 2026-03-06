@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 type Props = {
     isOpen: boolean;
@@ -16,7 +17,7 @@ export default function NotesModal({ isOpen, onClose }: Props) {
     useEffect(() => {
         if (!isOpen) return;
         setLoading(true);
-        fetch("/api/notes")
+        authFetch("/api/notes")
             .then((r) => r.json())
             .then((d) => { setContent(d.content || ""); setLoading(false); setSaveStatus("saved"); })
             .catch(() => setLoading(false));
@@ -25,7 +26,7 @@ export default function NotesModal({ isOpen, onClose }: Props) {
     const saveNotes = useCallback(async (text: string) => {
         setSaveStatus("saving");
         try {
-            await fetch("/api/notes", {
+            await authFetch("/api/notes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ content: text }),

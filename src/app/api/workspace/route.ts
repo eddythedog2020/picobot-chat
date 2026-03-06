@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { validateAuth } from "@/lib/authMiddleware";
 
 const WORKSPACE = path.join(os.homedir(), ".picobot", "workspace");
 
@@ -55,7 +56,10 @@ function readTree(dir: string, depth = 0, maxDepth = 4): FileNode[] {
     }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     const tree = readTree(WORKSPACE);
     return NextResponse.json({ workspace: WORKSPACE.replace(/\\/g, "/"), tree });
 }

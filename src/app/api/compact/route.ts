@@ -3,10 +3,14 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import path from "path";
 import db from "@/lib/db";
+import { validateAuth } from "@/lib/authMiddleware";
 
 const execFileAsync = promisify(execFile);
 
 export async function POST(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     const { messages, customPrompt } = await req.json();
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {

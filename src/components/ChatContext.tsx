@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 export type Message = {
   id: string;
@@ -39,21 +40,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Fetch bot name
   useEffect(() => {
-    fetch("/api/botname")
+    authFetch("/api/botname")
       .then(r => r.json())
       .then(d => { if (d.name) setBotName(d.name); })
       .catch(() => { });
   }, []);
 
   useEffect(() => {
-    fetch("/api/chats")
+    authFetch("/api/chats")
       .then((res) => res.json())
       .then(async (parsedChats) => {
         // Fetch messages for each chat
         const chatsWithMessages = await Promise.all(
           parsedChats.map(async (chat: ChatSession) => {
             try {
-              const msgRes = await fetch(`/api/chats/${chat.id}/messages`);
+              const msgRes = await authFetch(`/api/chats/${chat.id}/messages`);
               const messages = await msgRes.json();
               return { ...chat, messages: Array.isArray(messages) ? messages : [] };
             } catch {
@@ -86,12 +87,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       compactedAtIndex: null,
     };
 
-    fetch("/api/chats", {
+    authFetch("/api/chats", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: newChat.id, title: newChat.title, updatedAt: newChat.updatedAt }),
     }).then(() => {
-      fetch(`/api/chats/${newChat.id}/messages`, {
+      authFetch(`/api/chats/${newChat.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...newChat.messages[0], timestamp: Date.now() }),
@@ -104,7 +105,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addMessageToChat = (chatId: string, message: Message) => {
-    fetch(`/api/chats/${chatId}/messages`, {
+    authFetch(`/api/chats/${chatId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...message, timestamp: Date.now() }),
@@ -123,7 +124,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           }
 
           if (titleChanged) {
-            fetch(`/api/chats/${chatId}`, {
+            authFetch(`/api/chats/${chatId}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ title: newTitle, updatedAt: Date.now() }),
@@ -160,7 +161,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const compactChat = (chatId: string, summary: string, atIndex: number) => {
     // Persist to DB
-    fetch(`/api/chats/${chatId}`, {
+    authFetch(`/api/chats/${chatId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ compactedSummary: summary, compactedAtIndex: atIndex, updatedAt: Date.now() }),
@@ -177,7 +178,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteChat = (chatId: string) => {
-    fetch(`/api/chats/${chatId}`, { method: "DELETE" });
+    authFetch(`/api/chats/${chatId}`, { method: "DELETE" });
     setChats((prev) => {
       const remaining = prev.filter((c) => c.id !== chatId);
       if (activeChatId === chatId) {

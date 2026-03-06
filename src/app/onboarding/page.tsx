@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { authFetch } from "@/lib/authFetch";
 
 const PROVIDERS = [
     { label: "Google Gemini", base: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash" },
@@ -136,7 +137,7 @@ export default function OnboardingPage() {
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
-        fetch("/api/settings")
+        authFetch("/api/settings")
             .then(r => r.json())
             .then(data => {
                 if (data && data.apiKey && data.apiKey !== "picobot-local" && data.apiKey.length > 5) {
@@ -181,7 +182,7 @@ export default function OnboardingPage() {
     const saveAndFinish = async () => {
         setSaving(true);
         try {
-            await fetch("/api/settings", {
+            await authFetch("/api/settings", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -192,7 +193,7 @@ export default function OnboardingPage() {
                 }),
             });
             try {
-                await fetch("/api/botname", {
+                await authFetch("/api/botname", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ name: botName }),

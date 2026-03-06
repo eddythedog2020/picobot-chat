@@ -1,7 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { validateAuth } from '@/lib/authMiddleware';
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const chats = db.prepare('SELECT * FROM chats ORDER BY updatedAt DESC').all();
         return NextResponse.json(chats);
@@ -11,9 +17,18 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
+    let body;
     try {
-        const { id, title, updatedAt } = await request.json();
+        body = await request.json();
+    } catch (e) {
+        return NextResponse.json({ error: "Malformed JSON" }, { status: 400 });
+    }
+    const { id, title, updatedAt } = body;
+    try {
         db.prepare('INSERT INTO chats (id, title, updatedAt) VALUES (?, ?, ?)').run(id, title, updatedAt);
         return NextResponse.json({ id, title, updatedAt });
     } catch (error) {

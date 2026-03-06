@@ -1,8 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import { detectSearchCapability } from '@/lib/searchDetection';
+import { validateAuth } from '@/lib/authMiddleware';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get() as {
             apiBaseUrl: string;
@@ -42,7 +46,10 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const { override } = await request.json();
 

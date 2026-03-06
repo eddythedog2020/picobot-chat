@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { validateAuth } from '@/lib/authMiddleware';
 
 const PICOBOT_CONFIG_PATH = path.join(os.homedir(), '.picobot', 'config.json');
 
@@ -26,23 +27,37 @@ function writePicobotConfig(config: Record<string, unknown>) {
     }
 }
 
-export async function GET() {
+function maskSecret(secret: string): string {
+    if (!secret || secret.length <= 8) return '****';
+    return '****' + secret.slice(-4);
+}
+
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get() as Record<string, unknown>;
         const config = readPicobotConfig();
 
         // Merge channel settings from PicoBot's config.json
         const channels = config?.channels || {};
+
+        // Mask sensitive values
+        const maskedApiKey = maskSecret(settings?.apiKey as string || '');
+
         return NextResponse.json({
             ...settings,
+            apiKey: maskedApiKey,
+            authToken: undefined, // Never expose auth token
             telegram: {
                 enabled: channels?.telegram?.enabled || false,
-                token: channels?.telegram?.token || '',
+                token: maskSecret(channels?.telegram?.token || ''),
                 allowFrom: (channels?.telegram?.allowFrom || []).join(', '),
             },
             discord: {
                 enabled: channels?.discord?.enabled || false,
-                token: channels?.discord?.token || '',
+                token: maskSecret(channels?.discord?.token || ''),
                 allowFrom: (channels?.discord?.allowFrom || []).join(', '),
             },
         });
@@ -52,7 +67,10 @@ export async function GET() {
     }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const body = await request.json();
         const { apiBaseUrl, apiKey, defaultModel, telegram, discord, allowCodeExecution } = body;

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { detectSearchCapability } from "@/lib/searchDetection";
+import { validateAuth } from "@/lib/authMiddleware";
 
 export async function POST(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     const { message, images, history, compactedSummary, memories } = await req.json();
 
     if (!message && (!images || images.length === 0)) {

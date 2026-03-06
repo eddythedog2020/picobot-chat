@@ -1,7 +1,28 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { validateAuth } from '@/lib/authMiddleware';
 
-export async function DELETE(request: Request, context: any) {
+export async function GET(request: NextRequest, context: any) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
+    try {
+        const { id } = await Promise.resolve(context.params);
+        const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(id);
+        if (!chat) {
+            return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+        }
+        return NextResponse.json(chat);
+    } catch (error) {
+        console.error('Error fetching chat:', error);
+        return NextResponse.json({ error: 'Failed to fetch chat' }, { status: 500 });
+    }
+}
+
+export async function DELETE(request: NextRequest, context: any) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const { id } = await Promise.resolve(context.params);
         db.prepare('DELETE FROM chats WHERE id = ?').run(id);
@@ -12,7 +33,10 @@ export async function DELETE(request: Request, context: any) {
     }
 }
 
-export async function PATCH(request: Request, context: any) {
+export async function PATCH(request: NextRequest, context: any) {
+    const authError = validateAuth(request);
+    if (authError) return authError;
+
     try {
         const { id } = await Promise.resolve(context.params);
         const body = await request.json();

@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import db from '@/lib/db';
+import { validateAuth } from '@/lib/authMiddleware';
 
 // GET all memories
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const memories = db.prepare('SELECT * FROM memories ORDER BY createdAt DESC').all();
         return NextResponse.json(memories);
@@ -14,6 +18,9 @@ export async function GET() {
 
 // POST a new memory
 export async function POST(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const { content } = await req.json();
         if (!content || !content.trim()) {
@@ -32,6 +39,9 @@ export async function POST(req: NextRequest) {
 
 // DELETE a memory by id (passed as query param)
 export async function DELETE(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get('id');

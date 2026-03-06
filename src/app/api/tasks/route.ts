@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { validateAuth } from "@/lib/authMiddleware";
+
+export const dynamic = 'force-dynamic';
 
 const TASKS_PATH = path.join(os.homedir(), ".picobot", "workspace", "TASKS.md");
 
@@ -50,7 +53,10 @@ function writeTasks(tasks: Task[]) {
     fs.writeFileSync(TASKS_PATH, header + lines.join("\n") + "\n", "utf-8");
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const tasks = readTasks();
         return NextResponse.json({ tasks });
@@ -60,15 +66,25 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
-        const body = await req.json();
-        const { text, category } = body;
-        if (!text) return NextResponse.json({ error: "text is required" }, { status: 400 });
+        let body;
+        try {
+            body = await req.json();
+        } catch (e) {
+            return NextResponse.json({ error: "Malformed JSON" }, { status: 400 });
+        }
+
+        const { text, title, category } = body;
+        const taskText = text || title;
+        if (!taskText) return NextResponse.json({ error: "text or title is required" }, { status: 400 });
 
         const tasks = readTasks();
         const newTask: Task = {
             id: Math.random().toString(36).slice(2, 10),
-            text,
+            text: taskText,
             done: false,
             created: new Date().toISOString(),
             category: category || "general",
@@ -82,6 +98,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
@@ -97,6 +116,9 @@ export async function DELETE(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const body = await req.json();
         const { id, done } = body;

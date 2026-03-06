@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 type MemoryFile = {
     name: string;
@@ -34,7 +35,7 @@ export default function MemoryModal({ isOpen, onClose, onOpenFile }: Props) {
     useEffect(() => {
         if (!isOpen) return;
         setLoading(true);
-        fetch("/api/memory")
+        authFetch("/api/memory")
             .then((r) => r.json())
             .then((d) => { setFiles(d.files || []); setLoading(false); })
             .catch(() => setLoading(false));

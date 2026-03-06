@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { authFetch } from "@/lib/authFetch";
 
 type FileNode = {
     name: string;
@@ -137,14 +138,14 @@ export default function WorkspaceModal({ isOpen, onClose, onOpenFile }: Props) {
     useEffect(() => {
         if (!isOpen) return;
         setLoading(true);
-        fetch("/api/workspace")
+        authFetch("/api/workspace")
             .then((r) => r.json())
             .then((d) => { setTree(d.tree || []); setWorkspaceRoot(d.workspace || ""); setLoading(false); })
             .catch(() => setLoading(false));
 
         // Auto-refresh every 5 seconds to pick up new projects
         const interval = setInterval(() => {
-            fetch("/api/workspace")
+            authFetch("/api/workspace")
                 .then((r) => r.json())
                 .then((d) => setTree(d.tree || []))
                 .catch(() => { });
@@ -154,7 +155,7 @@ export default function WorkspaceModal({ isOpen, onClose, onOpenFile }: Props) {
     }, [isOpen]);
 
     const refreshTree = () => {
-        fetch("/api/workspace")
+        authFetch("/api/workspace")
             .then((r) => r.json())
             .then((d) => setTree(d.tree || []))
             .catch(() => { });
@@ -163,7 +164,7 @@ export default function WorkspaceModal({ isOpen, onClose, onOpenFile }: Props) {
     const handleDelete = async (projPath: string) => {
         setDeleting(true);
         try {
-            const res = await fetch(`/api/workspace/delete?path=${encodeURIComponent(projPath)}`, { method: "DELETE" });
+            const res = await authFetch(`/api/workspace/delete?path=${encodeURIComponent(projPath)}`, { method: "DELETE" });
             const data = await res.json();
             if (data.success) {
                 setConfirmDelete(null);
@@ -210,7 +211,7 @@ export default function WorkspaceModal({ isOpen, onClose, onOpenFile }: Props) {
 
     const handleFileClick = async (filePath: string) => {
         try {
-            const res = await fetch(`/api/workspace/file?path=${encodeURIComponent(filePath)}`);
+            const res = await authFetch(`/api/workspace/file?path=${encodeURIComponent(filePath)}`);
             const data = await res.json();
             if (data.error) { alert(data.error); return; }
             onOpenFile(data.content, data.name, extToLang(data.extension));

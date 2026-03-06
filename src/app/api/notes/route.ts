@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { validateAuth } from "@/lib/authMiddleware";
 
 const NOTES_PATH = path.join(os.homedir(), ".picobot", "workspace", "NOTES.md");
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         if (!fs.existsSync(NOTES_PATH)) {
             return NextResponse.json({ content: "" });
@@ -18,6 +22,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     try {
         const body = await req.json();
         const { content } = body;

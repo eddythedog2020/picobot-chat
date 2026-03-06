@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { validateAuth } from "@/lib/authMiddleware";
 
 const SOUL_PATH = path.join(os.homedir(), ".picobot", "workspace", "SOUL.md");
 const DEFAULT_NAME = "Eddy";
@@ -9,7 +10,6 @@ const DEFAULT_NAME = "Eddy";
 function extractBotName(): string {
     try {
         const content = fs.readFileSync(SOUL_PATH, "utf-8");
-        // Look for "I am <Name>" pattern in the SOUL.md file
         const match = content.match(/I am (\w+)/i);
         if (match && match[1]) {
             return match[1];
@@ -20,6 +20,9 @@ function extractBotName(): string {
     }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+    const authError = validateAuth(req);
+    if (authError) return authError;
+
     return NextResponse.json({ name: extractBotName() });
 }
