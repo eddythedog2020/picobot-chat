@@ -14,9 +14,18 @@ export async function POST(req: NextRequest) {
     const appDir = process.cwd();
     const steps: { step: string; success: boolean; output: string }[] = [];
 
+    // Expand PATH for macOS/Linux where non-interactive shells lack full PATH
+    const extraPaths = ['/usr/local/bin', '/opt/homebrew/bin', '/usr/bin', '/bin', '/usr/sbin', '/sbin'];
+    const currentPath = process.env.PATH || '';
+    const env = {
+        ...process.env,
+        PATH: extraPaths.filter(p => !currentPath.includes(p)).join(process.platform === 'win32' ? ';' : ':')
+            + (currentPath ? (process.platform === 'win32' ? ';' : ':') + currentPath : ''),
+    };
+
     try {
         // Step 1: git pull
-        const pullResult = await runCommand("git pull", appDir);
+        const pullResult = await runCommand("git pull", appDir, env);
         steps.push({
             step: "Pull latest code",
             success: pullResult.exitCode === 0,
@@ -27,7 +36,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({
                 success: false,
                 steps,
-                message: "Failed to pull updates. You may have local changes that conflict.",
+                message: `Failed to pull updates: ${pullResult.output.slice(-200)}`,
             });
         }
 
@@ -43,7 +52,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Step 2: npm install (in case dependencies changed)
-        const installResult = await runCommand("npm install --prefer-offline", appDir);
+        const installResult = await runCommand("npm install --prefer-offline", appDir, env);
         steps.push({
             step: "Install dependencies",
             success: installResult.exitCode === 0,
@@ -65,9 +74,9 @@ export async function POST(req: NextRequest) {
     }
 }
 
-function runCommand(cmd: string, cwd: string): Promise<{ output: string; exitCode: number }> {
+function runCommand(cmd: string, cwd: string, env?: NodeJS.ProcessEnv): Promise<{ output: string; exitCode: number }> {
     return new Promise((resolve) => {
-        exec(cmd, { cwd, timeout: 120000, maxBuffer: 5 * 1024 * 1024 }, (error, stdout, stderr) => {
+        exec(cmd, { cwd, timeout: 120000, maxBuffer: 5 * 1024 * 1024, env }, (error: any, stdout: any, stderr: any) => {
             const output = (stdout || "") + (stderr ? `\n${stderr}` : "");
             resolve({
                 output: output.trim(),
