@@ -186,9 +186,26 @@ export async function POST(req: NextRequest) {
         if (mcpTools.length > 0) {
             console.log(`[MCP] ${mcpTools.length} tools available for LLM:`);
             mcpTools.forEach((t: any) => console.log(`  - ${t.function.name}: ${t.function.description?.substring(0, 100)}`));
-            // Add MCP tool awareness to system prompt
-            const toolNames = mcpTools.map((t: any) => t.function.name).join(', ');
-            systemPrompt += `\n\n(System Note: MCP TOOLS AVAILABLE — You have access to external tools via the Model Context Protocol. When a user request can be fulfilled by one of these tools, you MUST use the tool instead of writing code. Available tools: ${toolNames}. To use a tool, respond with a tool_call. PREFER MCP tools over code execution when the tool matches the task.)`;
+
+            // Check which tool categories are available
+            const toolNames = mcpTools.map((t: any) => t.function.name);
+            const hasNetlify = toolNames.some((n: string) => n.startsWith('netlify__'));
+
+            // Build strong MCP directive
+            let mcpDirective = `\n\n(SYSTEM MCP DIRECTIVE: You have ${mcpTools.length} external MCP tools available. Available tools: ${toolNames.join(', ')}.\n`;
+            mcpDirective += `RULE: When a task can be done by an MCP tool, you MUST use the tool_call mechanism. Do NOT write Python/shell code to do what an MCP tool already does.\n`;
+
+            if (hasNetlify) {
+                mcpDirective += `\nNETLIFY RULES — CRITICAL:`;
+                mcpDirective += `\n- For ANY Netlify operation (deploy, list sites, create project, etc), you MUST use the netlify__* MCP tools. NEVER use Python code, subprocess, or the netlify CLI for Netlify operations.`;
+                mcpDirective += `\n- To deploy a site: use netlify__deploy_site with deployDirectory (absolute path) and optionally siteId.`;
+                mcpDirective += `\n- To create a new project: use netlify__create_new_project (then deploy to it).`;
+                mcpDirective += `\n- To list sites: use netlify__get_projects.`;
+                mcpDirective += `\n- If asked to "create files AND deploy", do file creation via code FIRST, then call the MCP deploy tool as a SEPARATE step. Never try to do both in a single code block.`;
+            }
+
+            mcpDirective += `\n)`;
+            systemPrompt += mcpDirective;
         }
     } catch (e) {
         console.error('[MCP] Failed to get tools:', e);
