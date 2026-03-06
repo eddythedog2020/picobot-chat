@@ -261,10 +261,10 @@ export async function POST(req: NextRequest) {
                 // No tool calls in this response
                 response = currentChoice?.message?.content || '';
 
-                // If we're in a multi-step flow (round > 0) and the LLM sent a "thinking"
-                // message without tool_calls, feed it back and let the LLM make the actual call.
+                // If the LLM sent a "thinking" message without tool_calls (e.g. "I will now
+                // create the project"), feed it back and let the LLM make the actual call.
                 // This handles LLMs that "think out loud" before issuing tool calls.
-                if (round > 0 && response && !response.includes('```')) {
+                if (mcpTools.length > 0 && response && !response.includes('```')) {
                     console.log(`[MCP] Round ${round + 1}: LLM returned text without tool_calls (${response.length} chars), giving it another chance`);
                     currentMessages = [
                         ...currentMessages,
