@@ -12,6 +12,7 @@ interface MCPServer {
     connected: boolean;
     toolCount: number;
     tools: string[];
+    builtin: boolean;
 }
 
 export default function MCPServersPanel() {
@@ -195,6 +196,18 @@ export default function MCPServersPanel() {
                                     <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
                                         {s.name}
                                     </span>
+                                    {s.builtin && (
+                                        <span style={{
+                                            fontSize: '10px',
+                                            background: 'rgba(139,92,246,0.15)',
+                                            color: '#A78BFA',
+                                            padding: '1px 6px',
+                                            borderRadius: '8px',
+                                            fontWeight: 600,
+                                        }}>
+                                            Built-in
+                                        </span>
+                                    )}
                                     {s.connected && (
                                         <span style={{
                                             fontSize: '10px',
@@ -220,28 +233,32 @@ export default function MCPServersPanel() {
                                             <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
                                         </svg>
                                     </button>
-                                    <button
-                                        onClick={() => handleToggle(s.name, !s.enabled)}
-                                        className="relative w-9 h-5 rounded-full transition-colors duration-200"
-                                        style={{ background: s.enabled ? '#8B5CF6' : 'rgba(255,255,255,0.1)' }}
-                                    >
-                                        <span
-                                            className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200"
-                                            style={{ transform: s.enabled ? 'translateX(16px)' : 'translateX(0)' }}
-                                        />
-                                    </button>
-                                    <button
-                                        onClick={() => handleRemove(s.name)}
-                                        title="Remove"
-                                        style={{
-                                            background: 'none', border: 'none', cursor: 'pointer',
-                                            color: '#EF4444', padding: '4px',
-                                        }}
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                                        </svg>
-                                    </button>
+                                    {!s.builtin && (
+                                        <>
+                                            <button
+                                                onClick={() => handleToggle(s.name, !s.enabled)}
+                                                className="relative w-9 h-5 rounded-full transition-colors duration-200"
+                                                style={{ background: s.enabled ? '#8B5CF6' : 'rgba(255,255,255,0.1)' }}
+                                            >
+                                                <span
+                                                    className="absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200"
+                                                    style={{ transform: s.enabled ? 'translateX(16px)' : 'translateX(0)' }}
+                                                />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemove(s.name)}
+                                                title="Remove"
+                                                style={{
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    color: '#EF4444', padding: '4px',
+                                                }}
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                                                </svg>
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 

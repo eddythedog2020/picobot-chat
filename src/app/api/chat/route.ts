@@ -184,7 +184,8 @@ export async function POST(req: NextRequest) {
         await mcpManager.initialize(); // Ensure servers from DB are connected
         mcpTools = mcpManager.getToolsForLLM();
         if (mcpTools.length > 0) {
-            console.log(`[MCP] ${mcpTools.length} tools available for LLM`);
+            console.log(`[MCP] ${mcpTools.length} tools available for LLM:`);
+            mcpTools.forEach((t: any) => console.log(`  - ${t.function.name}: ${t.function.description?.substring(0, 100)}`));
             // Add MCP tool awareness to system prompt
             const toolNames = mcpTools.map((t: any) => t.function.name).join(', ');
             systemPrompt += `\n\n(System Note: MCP TOOLS AVAILABLE — You have access to external tools via the Model Context Protocol. When a user request can be fulfilled by one of these tools, you MUST use the tool instead of writing code. Available tools: ${toolNames}. To use a tool, respond with a tool_call. PREFER MCP tools over code execution when the tool matches the task.)`;

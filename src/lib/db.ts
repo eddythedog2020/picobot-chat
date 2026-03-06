@@ -60,6 +60,7 @@ try { db.exec(`ALTER TABLE settings ADD COLUMN preferLlmSearch INTEGER`); } catc
 try { db.exec(`ALTER TABLE messages ADD COLUMN images TEXT`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE settings ADD COLUMN allowCodeExecution INTEGER DEFAULT 0`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE settings ADD COLUMN authToken TEXT`); } catch { /* already exists */ }
+try { db.exec(`ALTER TABLE settings ADD COLUMN netlifyToken TEXT`); } catch { /* already exists */ }
 
 // MCP servers table
 db.exec(`
