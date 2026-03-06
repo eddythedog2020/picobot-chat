@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
-const NOTES_PATH = path.join(os.homedir(), ".picobot", "workspace", "NOTES.md");
+const NOTES_PATH = path.join(WORKSPACE_DIR, "NOTES.md");
 
 export async function GET(req: NextRequest) {
     const authError = validateAuth(req);

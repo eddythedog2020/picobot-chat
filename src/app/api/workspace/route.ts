@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
-const WORKSPACE = path.join(os.homedir(), ".picobot", "workspace");
-
-// Auto-create workspace directory if it doesn't exist
-if (!fs.existsSync(WORKSPACE)) {
-    fs.mkdirSync(WORKSPACE, { recursive: true });
-}
+const WORKSPACE = WORKSPACE_DIR;
 
 type FileNode = {
     name: string;

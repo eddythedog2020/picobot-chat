@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
-const WORKSPACE = path.resolve(path.join(os.homedir(), ".picobot", "workspace"));
+const WORKSPACE = path.resolve(WORKSPACE_DIR);
 
 export async function DELETE(req: NextRequest) {
     const authError = validateAuth(req);

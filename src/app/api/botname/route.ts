@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
-const SOUL_PATH = path.join(os.homedir(), ".picobot", "workspace", "SOUL.md");
+const SOUL_PATH = path.join(WORKSPACE_DIR, "SOUL.md");
 const DEFAULT_NAME = "Eddy";
 
 function extractBotName(): string {

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
 export const dynamic = 'force-dynamic';
 
-const TASKS_PATH = path.join(os.homedir(), ".picobot", "workspace", "TASKS.md");
+const TASKS_PATH = path.join(WORKSPACE_DIR, "TASKS.md");
 
 type Task = {
     id: string;

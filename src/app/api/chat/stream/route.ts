@@ -1,16 +1,16 @@
 import { NextRequest } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
 import db from "@/lib/db";
 import { detectSearchCapability } from "@/lib/searchDetection";
 import { validateAuth } from "@/lib/authMiddleware";
 import { getCodeExecutionPrompt } from "@/lib/codeExecutionPrompt";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
 // Load skill summaries from workspace skills directory
 function loadSkillSummaries(): string {
     try {
-        const skillsDir = path.join(os.homedir(), '.picobot', 'workspace', 'skills');
+        const skillsDir = path.join(WORKSPACE_DIR, 'skills');
         if (!fs.existsSync(skillsDir)) return '';
         const skillFolders = fs.readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory());
         const skills: { name: string; description: string; path: string }[] = [];
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
     systemPrompt += `\n\n(System Note: Whenever you reference news articles, current events, statistics, or factual claims that come from external sources, you MUST cite your sources. Include the publication name and URL where possible. Format citations clearly at the end of your response, e.g. "Source: [Publication Name](URL)". Never present news or factual information without attribution.)`;
 
     if (settings?.allowCodeExecution) {
-        const workspaceDir = path.join(os.homedir(), '.picobot', 'workspace').replace(/\\/g, '\\\\');
+        const workspaceDir = WORKSPACE_DIR.replace(/\\/g, '\\\\');
         systemPrompt += `\n\n` + getCodeExecutionPrompt(workspaceDir);
     }
 

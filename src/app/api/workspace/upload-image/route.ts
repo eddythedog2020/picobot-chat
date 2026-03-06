@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { validateAuth } from "@/lib/authMiddleware";
+import { WORKSPACE_DIR } from "@/lib/paths";
 
 /**
  * POST /api/workspace/upload-image
@@ -19,10 +20,8 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Invalid image data" }, { status: 400 });
         }
 
-        // Determine workspace directory
-        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-        const workspaceDir = path.join(homeDir, '.picobot', 'workspace');
-        const uploadsDir = path.join(workspaceDir, 'uploads');
+        // Use the shared app-local workspace directory
+        const uploadsDir = path.join(WORKSPACE_DIR, 'uploads');
 
         // Create uploads directory if it doesn't exist
         if (!existsSync(uploadsDir)) {
