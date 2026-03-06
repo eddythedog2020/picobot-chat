@@ -384,17 +384,26 @@ class MCPManager {
                                     .filter((c: { type: string }) => c.type === 'text')
                                     .map((c: { type: string; text?: string }) => c.text || '')
                                     .join('');
-                                // Parse the JSON response to find the site ID
+
+                                // The Netlify MCP returns double-encoded JSON:
+                                // text = '"{\"rawToolResponse\":[{\"id\":\"uuid\"}]}"'
+                                // First JSON.parse gives a string, second gives the object
                                 try {
-                                    // The response is a JSON string inside the text
-                                    const parsed = JSON.parse(text.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
-                                    siteId = parsed.id || parsed.siteId;
+                                    let parsed: any = JSON.parse(text);
+                                    if (typeof parsed === 'string') {
+                                        parsed = JSON.parse(parsed);
+                                    }
+                                    // siteId is in rawToolResponse[0].id or rawToolResponse[0].site_id
+                                    if (parsed.rawToolResponse && Array.isArray(parsed.rawToolResponse)) {
+                                        siteId = parsed.rawToolResponse[0]?.id || parsed.rawToolResponse[0]?.site_id;
+                                    }
+                                    siteId = siteId || parsed.id || parsed.siteId || parsed.site_id;
                                     console.log(`[MCP] Auto-created project: ${siteName}, siteId: ${siteId}`);
                                 } catch {
-                                    // Try regex fallback
-                                    const idMatch = text.match(/"id"\s*:\s*"([a-f0-9-]{36})"/);
-                                    if (idMatch) {
-                                        siteId = idMatch[1];
+                                    // Regex fallback: find UUID in the raw text
+                                    const uuidMatch = text.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/);
+                                    if (uuidMatch) {
+                                        siteId = uuidMatch[0];
                                         console.log(`[MCP] Auto-created project (regex): siteId: ${siteId}`);
                                     }
                                 }
