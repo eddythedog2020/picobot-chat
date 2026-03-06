@@ -258,8 +258,45 @@ export async function POST(req: NextRequest) {
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const toolCalls = currentChoice?.message?.tool_calls;
             if (!toolCalls || toolCalls.length === 0) {
-                // No more tool calls — extract the text response
+                // No tool calls in this response
                 response = currentChoice?.message?.content || '';
+
+                // If we're in a multi-step flow (round > 0) and the LLM sent a "thinking"
+                // message without tool_calls, feed it back and let the LLM make the actual call.
+                // This handles LLMs that "think out loud" before issuing tool calls.
+                if (round > 0 && response && !response.includes('```')) {
+                    console.log(`[MCP] Round ${round + 1}: LLM returned text without tool_calls (${response.length} chars), giving it another chance`);
+                    currentMessages = [
+                        ...currentMessages,
+                        { role: 'assistant', content: response },
+                        { role: 'user', content: '(System: Continue with the tool call you described. Do not repeat the plan, just execute it.)' },
+                    ];
+
+                    const continueResponse = await fetch(apiBase, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`,
+                        },
+                        body: JSON.stringify({
+                            model,
+                            messages: currentMessages,
+                            tools: mcpTools.length > 0 ? mcpTools : undefined,
+                            stream: false,
+                        }),
+                    });
+
+                    if (continueResponse.ok) {
+                        currentData = await continueResponse.json();
+                        currentChoice = currentData.choices?.[0];
+                        // Check if this continuation produced tool calls
+                        if (currentChoice?.message?.tool_calls?.length > 0) {
+                            console.log(`[MCP] Continuation produced tool_calls, continuing loop`);
+                            continue; // Process the new tool calls in the next iteration
+                        }
+                        response = currentChoice?.message?.content || response;
+                    }
+                }
                 break;
             }
 
