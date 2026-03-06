@@ -228,7 +228,7 @@ export async function POST(req: NextRequest) {
 
         const data = await apiResponse.json();
         const firstChoice = data.choices?.[0];
-        let response: string;
+        let response: string = '';
 
         // Check if the LLM wants to call tools
         const toolCalls = firstChoice?.message?.tool_calls;
@@ -268,13 +268,19 @@ export async function POST(req: NextRequest) {
 
             // Make follow-up call with tool results
             console.log('[MCP] Making follow-up API call with tool results');
+
+            // Summarize tool results for logging
+            const toolResultsSummary = toolResults.map(r => `  ${r.tool_call_id}: ${r.content.substring(0, 200)}...`).join('\n');
+            console.log('[MCP] Tool results:\n' + toolResultsSummary);
+
+            // Try the standard OpenAI tool_calls format first
             const followUpMessages = [
                 ...messages,
                 firstChoice.message, // Include the assistant's tool_calls message
                 ...toolResults,
             ];
 
-            const followUpResponse = await fetch(apiBase, {
+            let followUpResponse = await fetch(apiBase, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -287,15 +293,53 @@ export async function POST(req: NextRequest) {
                 }),
             });
 
+            let followUpData: any = null;
             if (followUpResponse.ok) {
-                const followUpData = await followUpResponse.json();
-                response = followUpData.choices?.[0]?.message?.content || 'Tool executed but no response generated.';
-                console.log('[MCP] Follow-up response received');
+                followUpData = await followUpResponse.json();
+                response = followUpData.choices?.[0]?.message?.content || '';
+                console.log('[MCP] Follow-up response content length:', response.length);
             } else {
                 const errText = await followUpResponse.text();
-                console.error('[MCP] Follow-up call failed:', errText);
-                // Fall back to summarizing tool results directly
-                response = `Tool results:\n${toolResults.map(r => r.content).join('\n')}`;
+                console.error('[MCP] Follow-up call failed (status ' + followUpResponse.status + '):', errText.substring(0, 500));
+            }
+
+            // If the standard format returned empty/null, try a simplified fallback
+            // Some LLM providers (e.g. Gemini) don't fully support OpenAI's tool message format
+            if (!response) {
+                console.log('[MCP] Standard tool format returned empty, trying simplified fallback');
+                const toolResultsText = toolResults.map(r => r.content).join('\n\n');
+                const simplifiedMessages = [
+                    ...messages,
+                    {
+                        role: 'user',
+                        content: `I called the following MCP tools on your behalf and got these results. Please summarize the results for me in a clear, helpful way:\n\nTools called: ${toolCalls.map((tc: any) => tc.function.name).join(', ')}\n\nResults:\n${toolResultsText}`,
+                    },
+                ];
+
+                const fallbackResponse = await fetch(apiBase, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify({
+                        model,
+                        messages: simplifiedMessages,
+                        stream: false,
+                    }),
+                });
+
+                if (fallbackResponse.ok) {
+                    const fallbackData = await fallbackResponse.json();
+                    response = fallbackData.choices?.[0]?.message?.content || '';
+                    console.log('[MCP] Fallback response content length:', response.length);
+                }
+
+                // If even the fallback fails, just return the raw tool results
+                if (!response) {
+                    console.log('[MCP] Both follow-up methods failed, returning raw results');
+                    response = `MCP tool results:\n\n${toolResultsText}`;
+                }
             }
         } else {
             // Normal response without tool calls
