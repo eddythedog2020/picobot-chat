@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
     // Get MCP tools if available
     let mcpTools: any[] = [];
     try {
+        await mcpManager.initialize(); // Ensure servers from DB are connected
         mcpTools = mcpManager.getToolsForLLM();
         if (mcpTools.length > 0) {
             console.log(`[MCP] ${mcpTools.length} tools available for LLM`);
