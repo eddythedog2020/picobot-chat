@@ -1,6 +1,6 @@
 # PicoBot Chat 🤖
 
-A private, local-first agentic chat interface and command center for automation, personal memory, workflow management, and code execution. Built to run on Windows, macOS, Linux, or deployed to the cloud.
+A private, self-hosted agentic chat interface and command centre for automation, personal memory, workflow management, and code execution. Deploy to a VPS, run in Docker, or use locally on Windows, macOS, or Linux — your data never leaves your infrastructure.
 
 ## 🚀 Key Features
 
@@ -64,14 +64,16 @@ A private, local-first agentic chat interface and command center for automation,
   - macOS: `public/bin/picobot-darwin-amd64`
   - Linux: `public/bin/picobot-linux-amd64`
 
-### Installation
+### Quick Start (Local or VPS)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and configure your API credentials in **Settings** (gear icon).
+Open `http://<your-server-ip>:3000` (or `http://localhost:3000` if running locally) and configure your API credentials in **Settings** (gear icon).
+
+> **Recommended**: Deploy on a VPS (DigitalOcean, Hetzner, etc.) for always-on availability. See the Server Deployment section below.
 
 ## ☁️ Server Deployment (Ubuntu/DigitalOcean)
 
@@ -158,4 +160,4 @@ All settings are managed via the **Settings** page in the UI:
 
 ## ⚖️ License
 
-This project is private and intended for personal use.
+MIT — use it, deploy it, make it yours.
