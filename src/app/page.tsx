@@ -655,8 +655,9 @@ export default function ChatPage() {
           setActiveArtifact({ type: 'code', content: codeMatch[2].replace(/\n$/, ''), language: codeMatch[1] || 'text', title: 'Generated Code', id: Date.now().toString() });
         }
       }
-    } catch (err) {
-      const errMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: `⚠️ Failed to reach ${botName}. Check if the binary exists in \`./bin/picobot.exe\`.` };
+    } catch (err: any) {
+      const detail = err?.message || 'Network error';
+      const errMsg = { id: (Date.now() + 1).toString(), role: "ai" as const, content: `⚠️ Failed to reach ${botName}. ${detail}` };
       addMessageToChat(targetChatId, errMsg);
     } finally {
       setIsLoading(false);
