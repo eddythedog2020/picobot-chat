@@ -231,10 +231,22 @@ export async function POST(req: NextRequest) {
         const firstChoice = data.choices?.[0];
         let response: string = '';
 
-        // Check if the LLM wants to call tools
-        const toolCalls = firstChoice?.message?.tool_calls;
-        if (toolCalls && toolCalls.length > 0) {
-            console.log(`[MCP] LLM requested ${toolCalls.length} tool call(s):`, toolCalls.map((tc: any) => tc.function.name));
+        // Multi-round tool-calling loop
+        // The LLM may need multiple tool calls (e.g. create project → deploy site)
+        const MAX_TOOL_ROUNDS = 5;
+        let currentMessages = [...messages];
+        let currentData = data;
+        let currentChoice = firstChoice;
+
+        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            const toolCalls = currentChoice?.message?.tool_calls;
+            if (!toolCalls || toolCalls.length === 0) {
+                // No more tool calls — extract the text response
+                response = currentChoice?.message?.content || '';
+                break;
+            }
+
+            console.log(`[MCP] Round ${round + 1}: LLM requested ${toolCalls.length} tool call(s):`, toolCalls.map((tc: any) => tc.function.name));
 
             // Execute all tool calls
             const toolResults: { role: string; tool_call_id: string; content: string }[] = [];
@@ -251,7 +263,7 @@ export async function POST(req: NextRequest) {
                 try {
                     const result = await mcpManager.callTool(toolName, toolArgs);
                     const resultText = typeof result === 'string' ? result : JSON.stringify(result);
-                    console.log(`[MCP] Tool ${toolName} result (${resultText.length} chars)`);
+                    console.log(`[MCP] Tool ${toolName} result (${resultText.length} chars): ${resultText.substring(0, 200)}`);
                     toolResults.push({
                         role: 'tool',
                         tool_call_id: toolCall.id,
@@ -267,21 +279,17 @@ export async function POST(req: NextRequest) {
                 }
             }
 
-            // Make follow-up call with tool results
-            console.log('[MCP] Making follow-up API call with tool results');
-
-            // Summarize tool results for logging
-            const toolResultsSummary = toolResults.map(r => `  ${r.tool_call_id}: ${r.content.substring(0, 200)}...`).join('\n');
-            console.log('[MCP] Tool results:\n' + toolResultsSummary);
-
-            // Try the standard OpenAI tool_calls format first
-            const followUpMessages = [
-                ...messages,
-                firstChoice.message, // Include the assistant's tool_calls message
+            // Build follow-up messages including tool results
+            currentMessages = [
+                ...currentMessages,
+                currentChoice.message, // Include the assistant's tool_calls message
                 ...toolResults,
             ];
 
-            let followUpResponse = await fetch(apiBase, {
+            console.log(`[MCP] Making follow-up API call (round ${round + 1}) with tool results`);
+
+            // Follow-up call WITH tools so the LLM can make more tool calls if needed
+            const followUpResponse = await fetch(apiBase, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -289,25 +297,22 @@ export async function POST(req: NextRequest) {
                 },
                 body: JSON.stringify({
                     model,
-                    messages: followUpMessages,
+                    messages: currentMessages,
+                    tools: mcpTools.length > 0 ? mcpTools : undefined,
                     stream: false,
                 }),
             });
 
-            let followUpData: any = null;
             if (followUpResponse.ok) {
-                followUpData = await followUpResponse.json();
-                response = followUpData.choices?.[0]?.message?.content || '';
-                console.log('[MCP] Follow-up response content length:', response.length);
+                currentData = await followUpResponse.json();
+                currentChoice = currentData.choices?.[0];
+                response = currentChoice?.message?.content || '';
+                console.log(`[MCP] Follow-up response: content=${response.length} chars, tool_calls=${currentChoice?.message?.tool_calls?.length || 0}`);
+                // Loop continues — if there are more tool_calls, they'll be handled in the next iteration
             } else {
                 const errText = await followUpResponse.text();
                 console.error('[MCP] Follow-up call failed (status ' + followUpResponse.status + '):', errText.substring(0, 500));
-            }
-
-            // If the standard format returned empty/null, try a simplified fallback
-            // Some LLM providers (e.g. Gemini) don't fully support OpenAI's tool message format
-            if (!response) {
-                console.log('[MCP] Standard tool format returned empty, trying simplified fallback');
+                // Try simplified fallback (for Gemini compatibility)
                 const toolResultsText = toolResults.map(r => r.content).join('\n\n');
                 const simplifiedMessages = [
                     ...messages,
@@ -336,15 +341,16 @@ export async function POST(req: NextRequest) {
                     console.log('[MCP] Fallback response content length:', response.length);
                 }
 
-                // If even the fallback fails, just return the raw tool results
                 if (!response) {
-                    console.log('[MCP] Both follow-up methods failed, returning raw results');
                     response = `MCP tool results:\n\n${toolResultsText}`;
                 }
+                break; // Exit loop on error
             }
-        } else {
-            // Normal response without tool calls
-            response = firstChoice?.message?.content || 'No response from API';
+        }
+
+        // If no response was generated after all rounds, provide a fallback
+        if (!response) {
+            response = currentChoice?.message?.content || 'No response from API';
         }
 
         // PERSISTENCE FOR AUTOMATED TESTS: 
