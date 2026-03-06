@@ -337,6 +337,85 @@ class MCPManager {
             const reconstructedArgs = reconstructSelectSchema(mapping, args);
             console.log(`[MCP] Simplified tool "${qualifiedName}" → original "${mapping.originalToolName}" operation="${mapping.operation}"`);
 
+            // For deploy-site: ensure .netlify/state.json exists with a valid siteId.
+            // If no siteId is provided, auto-create a Netlify project first.
+            if (mapping.operation === 'deploy-site' && args.deployDirectory) {
+                const deployDir = String(args.deployDirectory);
+                const path = await import('path');
+                const fs = await import('fs');
+                const netlifyDir = path.join(deployDir, '.netlify');
+                const stateFile = path.join(netlifyDir, 'state.json');
+
+                // Ensure .netlify directory exists
+                if (!fs.existsSync(netlifyDir)) {
+                    fs.mkdirSync(netlifyDir, { recursive: true });
+                }
+
+                // Check if we need to create a project (no siteId provided and no existing state)
+                let siteId = args.siteId as string | undefined;
+                if (!siteId) {
+                    try {
+                        const existing = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+                        if (existing.siteId) siteId = existing.siteId;
+                    } catch { /* file doesn't exist or is invalid */ }
+                }
+
+                if (!siteId) {
+                    // Auto-create a Netlify project to get a siteId
+                    const siteName = path.basename(deployDir) + '-' + Date.now();
+                    console.log(`[MCP] No siteId for deploy — auto-creating project "${siteName}"`);
+
+                    const server = this.servers.get(mapping.originalServerName);
+                    if (server) {
+                        try {
+                            const createResult = await server.client.callTool({
+                                name: 'netlify-project-services-updater',
+                                arguments: {
+                                    selectSchema: {
+                                        operation: 'create-new-project',
+                                        params: { name: siteName },
+                                    },
+                                },
+                            });
+
+                            // Extract siteId from create result
+                            if (createResult.content && Array.isArray(createResult.content)) {
+                                const text = createResult.content
+                                    .filter((c: { type: string }) => c.type === 'text')
+                                    .map((c: { type: string; text?: string }) => c.text || '')
+                                    .join('');
+                                // Parse the JSON response to find the site ID
+                                try {
+                                    // The response is a JSON string inside the text
+                                    const parsed = JSON.parse(text.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+                                    siteId = parsed.id || parsed.siteId;
+                                    console.log(`[MCP] Auto-created project: ${siteName}, siteId: ${siteId}`);
+                                } catch {
+                                    // Try regex fallback
+                                    const idMatch = text.match(/"id"\s*:\s*"([a-f0-9-]{36})"/);
+                                    if (idMatch) {
+                                        siteId = idMatch[1];
+                                        console.log(`[MCP] Auto-created project (regex): siteId: ${siteId}`);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`[MCP] Auto-create project failed:`, e);
+                        }
+                    }
+                }
+
+                // Write state.json with siteId
+                if (siteId) {
+                    fs.writeFileSync(stateFile, JSON.stringify({ siteId }));
+                    console.log(`[MCP] Wrote state.json with siteId: ${siteId}`);
+                } else {
+                    // Write empty state so the file at least exists
+                    fs.writeFileSync(stateFile, JSON.stringify({}));
+                    console.log(`[MCP] Warning: No siteId obtained, deploy may fail`);
+                }
+            }
+
             const server = this.servers.get(mapping.originalServerName);
             if (!server) {
                 return JSON.stringify({ error: `MCP server "${mapping.originalServerName}" not found` });
