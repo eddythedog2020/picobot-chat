@@ -13,6 +13,7 @@ import NotesModal from "@/components/NotesModal";
 import { useChat } from "@/components/ChatContext";
 import { convertDelimitedToMarkdown } from "@/lib/delimitedParser";
 import allSuggestions from "@/data/suggestions.json";
+import MCPServersPanel from "@/components/MCPServersPanel";
 
 type Suggestion = { title: string; description: string; prompt: string };
 
@@ -1085,6 +1086,9 @@ export default function ChatPage() {
                           </button>
                         </div>
                       </div>
+
+                      {/* ── MCP Servers Section ── */}
+                      <MCPServersPanel />
                     </>)}
 
                     {settingsTab === 'advanced' && (<>

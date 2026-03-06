@@ -6,6 +6,7 @@ import { detectSearchCapability } from "@/lib/searchDetection";
 import { validateAuth } from "@/lib/authMiddleware";
 import { getCodeExecutionPrompt } from "@/lib/codeExecutionPrompt";
 import { WORKSPACE_DIR } from "@/lib/paths";
+import mcpManager from "@/lib/mcpManager";
 
 // Load skill summaries from workspace skills directory
 function loadSkillSummaries(): string {
@@ -121,21 +122,117 @@ export async function POST(req: NextRequest) {
     // Build the full user message with conversation context
     const fullUserMessage = conversationContext + message;
 
-    // Build the API URL — ensure it ends with /chat/completions
-    let apiBase = settings?.apiBaseUrl || 'http://localhost:11434/v1';
-    // Remove trailing slash
-    apiBase = apiBase.replace(/\/+$/, '');
-    // If it doesn't already end with /chat/completions, add it
-    if (!apiBase.endsWith('/chat/completions')) {
-        // If it ends with /v1 or similar, add /chat/completions
-        apiBase = apiBase + '/chat/completions';
+    // --- MCP Tool Integration ---
+    // Initialize MCP servers (no-op if already done)
+    await mcpManager.initialize();
+    const mcpTools = mcpManager.getToolsForLLM();
+    const hasMCPTools = mcpTools.length > 0;
+
+    // If MCP tools are available, add a note to the system prompt
+    if (hasMCPTools) {
+        const toolNames = mcpTools.map(t => `- ${t.function.name}: ${t.function.description}`).join('\n');
+        systemPrompt += `\n\n(System Note: You have access to the following MCP tools. Use them when they would help answer the user's question. Call tools by name with the required arguments.\nAvailable tools:\n${toolNames})`;
     }
 
+    // Build the messages array
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: fullUserMessage },
+    ];
+
+    // Build the API URL — ensure it ends with /chat/completions
+    let apiBase = settings?.apiBaseUrl || 'http://localhost:11434/v1';
+    apiBase = apiBase.replace(/\/+$/, '');
+    if (!apiBase.endsWith('/chat/completions')) {
+        apiBase = apiBase + '/chat/completions';
+    }
     const apiKey = settings?.apiKey || 'picobot-local';
     const model = settings?.defaultModel || 'llama3';
 
-    // Call the OpenAI-compatible API directly with streaming
     try {
+        // --- Tool-calling flow ---
+        // If MCP tools are available, make a NON-streaming first call to check for tool calls.
+        // If no tools, skip straight to streaming.
+        if (hasMCPTools) {
+            const firstCallBody: Record<string, unknown> = {
+                model,
+                messages,
+                tools: mcpTools,
+                stream: false,
+            };
+
+            const firstResponse = await fetch(apiBase, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify(firstCallBody),
+            });
+
+            if (firstResponse.ok) {
+                const firstResult = await firstResponse.json();
+                const choice = firstResult.choices?.[0];
+                const toolCalls = choice?.message?.tool_calls;
+
+                if (toolCalls && toolCalls.length > 0) {
+                    // Execute each tool call via MCPManager
+                    const toolMessages: Array<{ role: string; content: string; tool_call_id?: string }> = [
+                        ...messages,
+                        choice.message, // Include the assistant's tool_calls message
+                    ];
+
+                    for (const tc of toolCalls) {
+                        const toolName = tc.function?.name || '';
+                        let toolArgs: Record<string, unknown> = {};
+                        try {
+                            toolArgs = JSON.parse(tc.function?.arguments || '{}');
+                        } catch { /* use empty args */ }
+
+                        console.log(`[MCP] Calling tool: ${toolName}`, toolArgs);
+                        const toolResult = await mcpManager.callTool(toolName, toolArgs);
+                        console.log(`[MCP] Tool result (${toolName}):`, toolResult.substring(0, 200));
+
+                        toolMessages.push({
+                            role: 'tool',
+                            content: toolResult,
+                            tool_call_id: tc.id,
+                        });
+                    }
+
+                    // Second call — streaming — with tool results included
+                    const secondResponse = await fetch(apiBase, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`,
+                        },
+                        body: JSON.stringify({
+                            model,
+                            messages: toolMessages,
+                            stream: true,
+                        }),
+                    });
+
+                    if (secondResponse.ok) {
+                        return createStreamResponse(secondResponse);
+                    } else {
+                        const errorText = await secondResponse.text();
+                        return createErrorStreamResponse(`API Error after tool call (${secondResponse.status}): ${errorText}`);
+                    }
+                } else {
+                    // No tool calls — LLM responded directly
+                    // Stream the text content back as if it were streamed
+                    const content = choice?.message?.content || '';
+                    return createTextStreamResponse(content);
+                }
+            }
+            // If the first call failed (e.g., provider doesn't support tools),
+            // fall through to the normal streaming path without tools
+            console.log('[MCP] First call with tools failed, falling back to normal streaming');
+        }
+
+        // --- Normal streaming path (no MCP tools, or tool call failed) ---
         const apiResponse = await fetch(apiBase, {
             method: 'POST',
             headers: {
@@ -144,110 +241,130 @@ export async function POST(req: NextRequest) {
             },
             body: JSON.stringify({
                 model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: fullUserMessage },
-                ],
+                messages,
                 stream: true,
             }),
         });
 
         if (!apiResponse.ok) {
             const errorText = await apiResponse.text();
-            const encoder = new TextEncoder();
-            const errorStream = new ReadableStream({
-                start(controller) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `⚠️ API Error (${apiResponse.status}): ${errorText}` })}\n\n`));
-                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                    controller.close();
-                },
-            });
-            return new Response(errorStream, {
-                headers: {
-                    "Content-Type": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                },
-            });
+            return createErrorStreamResponse(`API Error (${apiResponse.status}): ${errorText}`);
         }
 
-        // Pipe the API's SSE stream through, extracting content deltas
-        const encoder = new TextEncoder();
-        const apiReader = apiResponse.body?.getReader();
-        const decoder = new TextDecoder();
+        return createStreamResponse(apiResponse);
+    } catch (err: any) {
+        return createErrorStreamResponse(`Connection error: ${err.message}`);
+    }
+}
 
-        const stream = new ReadableStream({
-            async start(controller) {
-                if (!apiReader) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: "No response body" })}\n\n`));
-                    controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                    controller.close();
-                    return;
-                }
+// --- Helper functions ---
 
-                let buffer = '';
-                try {
-                    while (true) {
-                        const { done, value } = await apiReader.read();
-                        if (done) break;
+/** Create an SSE stream response from an upstream API streaming response */
+function createStreamResponse(apiResponse: Response): Response {
+    const encoder = new TextEncoder();
+    const apiReader = apiResponse.body?.getReader();
+    const decoder = new TextDecoder();
 
-                        buffer += decoder.decode(value, { stream: true });
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || '';
+    const stream = new ReadableStream({
+        async start(controller) {
+            if (!apiReader) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: "No response body" })}\n\n`));
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                controller.close();
+                return;
+            }
 
-                        for (const line of lines) {
-                            const trimmed = line.trim();
-                            if (!trimmed || !trimmed.startsWith('data: ')) continue;
+            let buffer = '';
+            try {
+                while (true) {
+                    const { done, value } = await apiReader.read();
+                    if (done) break;
 
-                            const payload = trimmed.slice(6);
-                            if (payload === '[DONE]') {
-                                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                                controller.close();
-                                return;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+                        const payload = trimmed.slice(6);
+                        if (payload === '[DONE]') {
+                            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                            controller.close();
+                            return;
+                        }
+
+                        try {
+                            const parsed = JSON.parse(payload);
+                            const delta = parsed.choices?.[0]?.delta?.content;
+                            if (delta) {
+                                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`));
                             }
-
-                            try {
-                                const parsed = JSON.parse(payload);
-                                const delta = parsed.choices?.[0]?.delta?.content;
-                                if (delta) {
-                                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: delta })}\n\n`));
-                                }
-                            } catch {
-                                // Skip malformed JSON chunks
-                            }
+                        } catch {
+                            // Skip malformed JSON chunks
                         }
                     }
-                } catch (err: any) {
-                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err.message || "Stream error" })}\n\n`));
                 }
+            } catch (err: any) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: err.message || "Stream error" })}\n\n`));
+            }
 
-                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                controller.close();
-            },
-        });
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+        },
+    });
 
-        return new Response(stream, {
-            headers: {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            },
-        });
-    } catch (err: any) {
-        const encoder = new TextEncoder();
-        const errorStream = new ReadableStream({
-            start(controller) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `⚠️ Connection error: ${err.message}` })}\n\n`));
-                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                controller.close();
-            },
-        });
-        return new Response(errorStream, {
-            headers: {
-                "Content-Type": "text/event-stream",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            },
-        });
-    }
+    return new Response(stream, {
+        headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    });
+}
+
+/** Create an SSE stream that sends a single text content (for non-streaming tool call responses) */
+function createTextStreamResponse(content: string): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+        start(controller) {
+            // Send content in chunks to simulate streaming
+            const chunkSize = 20;
+            for (let i = 0; i < content.length; i += chunkSize) {
+                const chunk = content.substring(i, i + chunkSize);
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: chunk })}\n\n`));
+            }
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+        },
+    });
+
+    return new Response(stream, {
+        headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    });
+}
+
+/** Create an SSE stream that sends a single error message */
+function createErrorStreamResponse(message: string): Response {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+        start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ token: `⚠️ ${message}` })}\n\n`));
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+        },
+    });
+
+    return new Response(stream, {
+        headers: {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    });
 }

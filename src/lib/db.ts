@@ -61,6 +61,19 @@ try { db.exec(`ALTER TABLE messages ADD COLUMN images TEXT`); } catch { /* alrea
 try { db.exec(`ALTER TABLE settings ADD COLUMN allowCodeExecution INTEGER DEFAULT 0`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE settings ADD COLUMN authToken TEXT`); } catch { /* already exists */ }
 
+// MCP servers table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS mcp_servers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    command TEXT NOT NULL,
+    args TEXT NOT NULL DEFAULT '[]',
+    env TEXT NOT NULL DEFAULT '{}',
+    enabled INTEGER DEFAULT 1,
+    createdAt INTEGER NOT NULL
+  );
+`);
+
 // Auth token is set during the onboarding flow — not auto-generated on startup.
 // When no token is configured, the auth middleware allows all requests (first-run state).
 
