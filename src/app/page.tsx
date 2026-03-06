@@ -119,6 +119,8 @@ export default function ChatPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [settingsTab, setSettingsTab] = useState<"general" | "advanced">("general");
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "success" | "uptodate" | "error">("idle");
+  const [updateMessage, setUpdateMessage] = useState("");
 
   // Search capability detection
   const [searchCapability, setSearchCapability] = useState<{
@@ -1084,6 +1086,80 @@ export default function ChatPage() {
                       </div>
                     </>)}
 
+                    {settingsTab === 'advanced' && (<>
+                      {/* ── Update PicoBot ── */}
+                      <div>
+                        <div className="flex items-center gap-2" style={{ marginBottom: '16px' }}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" style={{ color: '#3B82F6' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 2v6h-6" />
+                            <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                            <path d="M3 22v-6h6" />
+                            <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                          </svg>
+                          <h2 className="text-sm font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Update PicoBot</h2>
+                        </div>
+                        <p className="text-[12px]" style={{ color: 'var(--text-tertiary)', marginBottom: '16px', lineHeight: '1.5' }}>
+                          Pull the latest updates from the release repository. After updating, restart the app to apply changes.
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <button
+                            onClick={async () => {
+                              setUpdateStatus('checking');
+                              setUpdateMessage('');
+                              try {
+                                const res = await authFetch('/api/update', { method: 'POST' });
+                                const data = await res.json();
+                                if (data.success) {
+                                  setUpdateStatus(data.needsRestart ? 'success' : 'uptodate');
+                                } else {
+                                  setUpdateStatus('error');
+                                }
+                                setUpdateMessage(data.message || '');
+                              } catch (err: any) {
+                                setUpdateStatus('error');
+                                setUpdateMessage(`Connection error: ${err.message}`);
+                              }
+                            }}
+                            disabled={updateStatus === 'checking'}
+                            style={{
+                              padding: '10px 24px',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              borderRadius: '8px',
+                              border: '1px solid rgba(59,130,246,0.3)',
+                              background: updateStatus === 'success' ? '#22c55e'
+                                : updateStatus === 'error' ? '#ef4444'
+                                  : updateStatus === 'uptodate' ? 'rgba(255,255,255,0.06)'
+                                    : 'rgba(59,130,246,0.1)',
+                              color: updateStatus === 'success' || updateStatus === 'error' ? '#fff'
+                                : updateStatus === 'uptodate' ? 'var(--text-tertiary)'
+                                  : '#3B82F6',
+                              cursor: updateStatus === 'checking' ? 'not-allowed' : 'pointer',
+                              opacity: updateStatus === 'checking' ? 0.6 : 1,
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {updateStatus === 'checking' ? '⟳ Checking for updates...'
+                              : updateStatus === 'success' ? '✓ Updated — Restart required'
+                                : updateStatus === 'uptodate' ? '✓ Up to date'
+                                  : updateStatus === 'error' ? '✗ Update failed'
+                                    : '↻ Check for Updates'}
+                          </button>
+                        </div>
+                        {updateMessage && (
+                          <p className="text-[11px]" style={{
+                            color: updateStatus === 'error' ? '#f87171' : 'var(--text-tertiary)',
+                            marginTop: '10px',
+                            lineHeight: '1.5',
+                          }}>
+                            {updateMessage}
+                          </p>
+                        )}
+                      </div>
+
+                      <hr className="apple-divider" />
+                    </>)}
+
                     {settingsTab === 'general' && (<>
                       {/* ── Telegram Section ── */}
                       <div>
@@ -1939,7 +2015,7 @@ export default function ChatPage() {
             </div>
           )}
         </div>
-      </div>
+      </div >
 
       <WorkspaceModal
         isOpen={showWorkspace}
