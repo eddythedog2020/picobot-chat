@@ -1,7 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
-import crypto from 'crypto';
 
 // Ensure the data directory exists
 const dataDir = path.join(process.cwd(), 'data');
@@ -62,12 +61,7 @@ try { db.exec(`ALTER TABLE messages ADD COLUMN images TEXT`); } catch { /* alrea
 try { db.exec(`ALTER TABLE settings ADD COLUMN allowCodeExecution INTEGER DEFAULT 0`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE settings ADD COLUMN authToken TEXT`); } catch { /* already exists */ }
 
-// Auto-generate auth token if not set
-const currentSettings = db.prepare('SELECT authToken FROM settings WHERE id = 1').get() as { authToken?: string } | undefined;
-if (!currentSettings?.authToken) {
-  const token = crypto.randomBytes(32).toString('hex');
-  db.prepare('UPDATE settings SET authToken = ? WHERE id = 1').run(token);
-  console.log('🔒 Auth token generated. The web UI will auto-authenticate.');
-}
+// Auth token is set during the onboarding flow — not auto-generated on startup.
+// When no token is configured, the auth middleware allows all requests (first-run state).
 
 export default db;
