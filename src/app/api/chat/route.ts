@@ -6,6 +6,7 @@ import { detectSearchCapability } from "@/lib/searchDetection";
 import { validateAuth } from "@/lib/authMiddleware";
 import { getCodeExecutionPrompt } from "@/lib/codeExecutionPrompt";
 import { WORKSPACE_DIR } from "@/lib/paths";
+import mcpManager from "@/lib/mcpManager";
 
 // Load skill summaries from workspace skills directory
 function loadSkillSummaries(): string {
@@ -177,30 +178,128 @@ export async function POST(req: NextRequest) {
     let systemPrompt = "You are a helpful AI assistant.";
     systemPrompt += promptSuffix;
 
+    // Get MCP tools if available
+    let mcpTools: any[] = [];
     try {
+        mcpTools = mcpManager.getToolsForLLM();
+        if (mcpTools.length > 0) {
+            console.log(`[MCP] ${mcpTools.length} tools available for LLM`);
+            // Add MCP tool awareness to system prompt
+            const toolNames = mcpTools.map((t: any) => t.function.name).join(', ');
+            systemPrompt += `\n\n(System Note: MCP TOOLS AVAILABLE — You have access to external tools via the Model Context Protocol. When a user request can be fulfilled by one of these tools, you MUST use the tool instead of writing code. Available tools: ${toolNames}. To use a tool, respond with a tool_call. PREFER MCP tools over code execution when the tool matches the task.)`;
+        }
+    } catch (e) {
+        console.error('[MCP] Failed to get tools:', e);
+    }
+
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: fullMessage },
+    ];
+
+    try {
+        // Build API request body
+        const requestBody: Record<string, unknown> = {
+            model,
+            messages,
+            stream: false,
+        };
+
+        // Add tools if available
+        if (mcpTools.length > 0) {
+            requestBody.tools = mcpTools;
+        }
+
         const apiResponse = await fetch(apiBase, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${apiKey}`,
             },
-            body: JSON.stringify({
-                model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: fullMessage },
-                ],
-                stream: false,
-            }),
+            body: JSON.stringify(requestBody),
         });
 
         if (!apiResponse.ok) {
             const errorText = await apiResponse.text();
+            console.error(`[MCP] API call failed (${apiResponse.status}):`, errorText);
             return NextResponse.json({ response: `⚠️ API Error (${apiResponse.status}): ${errorText}` });
         }
 
         const data = await apiResponse.json();
-        const response = data.choices?.[0]?.message?.content || 'No response from API';
+        const firstChoice = data.choices?.[0];
+        let response: string;
+
+        // Check if the LLM wants to call tools
+        const toolCalls = firstChoice?.message?.tool_calls;
+        if (toolCalls && toolCalls.length > 0) {
+            console.log(`[MCP] LLM requested ${toolCalls.length} tool call(s):`, toolCalls.map((tc: any) => tc.function.name));
+
+            // Execute all tool calls
+            const toolResults: { role: string; tool_call_id: string; content: string }[] = [];
+            for (const toolCall of toolCalls) {
+                const toolName = toolCall.function.name;
+                let toolArgs: Record<string, unknown> = {};
+                try {
+                    toolArgs = JSON.parse(toolCall.function.arguments || '{}');
+                } catch {
+                    toolArgs = {};
+                }
+
+                console.log(`[MCP] Executing tool: ${toolName}`, toolArgs);
+                try {
+                    const result = await mcpManager.callTool(toolName, toolArgs);
+                    const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+                    console.log(`[MCP] Tool ${toolName} result (${resultText.length} chars)`);
+                    toolResults.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: resultText,
+                    });
+                } catch (toolErr: any) {
+                    console.error(`[MCP] Tool ${toolName} failed:`, toolErr);
+                    toolResults.push({
+                        role: 'tool',
+                        tool_call_id: toolCall.id,
+                        content: `Error executing tool: ${toolErr.message}`,
+                    });
+                }
+            }
+
+            // Make follow-up call with tool results
+            console.log('[MCP] Making follow-up API call with tool results');
+            const followUpMessages = [
+                ...messages,
+                firstChoice.message, // Include the assistant's tool_calls message
+                ...toolResults,
+            ];
+
+            const followUpResponse = await fetch(apiBase, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                },
+                body: JSON.stringify({
+                    model,
+                    messages: followUpMessages,
+                    stream: false,
+                }),
+            });
+
+            if (followUpResponse.ok) {
+                const followUpData = await followUpResponse.json();
+                response = followUpData.choices?.[0]?.message?.content || 'Tool executed but no response generated.';
+                console.log('[MCP] Follow-up response received');
+            } else {
+                const errText = await followUpResponse.text();
+                console.error('[MCP] Follow-up call failed:', errText);
+                // Fall back to summarizing tool results directly
+                response = `Tool results:\n${toolResults.map(r => r.content).join('\n')}`;
+            }
+        } else {
+            // Normal response without tool calls
+            response = firstChoice?.message?.content || 'No response from API';
+        }
 
         // PERSISTENCE FOR AUTOMATED TESTS: 
         // If this is a direct API call (likely from a test suite), ensure the interaction is recorded
