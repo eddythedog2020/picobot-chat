@@ -55,6 +55,9 @@ function loadSkillSummaries(): string {
 }
 
 
+// Allow up to 120s for multi-round MCP tool calls (code execution + deploy)
+export const maxDuration = 120;
+
 export async function POST(req: NextRequest) {
     const authError = validateAuth(req);
     if (authError) return authError;
@@ -198,10 +201,10 @@ export async function POST(req: NextRequest) {
             if (hasNetlify) {
                 mcpDirective += `\nNETLIFY RULES — CRITICAL:`;
                 mcpDirective += `\n- For ANY Netlify operation (deploy, list sites, create project, etc), you MUST use the netlify__* MCP tools. NEVER use Python code, subprocess, or the netlify CLI for Netlify operations.`;
-                mcpDirective += `\n- To deploy a site: use netlify__deploy_site with deployDirectory (absolute path) and optionally siteId.`;
-                mcpDirective += `\n- To create a new project: use netlify__create_new_project (then deploy to it).`;
+                mcpDirective += `\n- To deploy a site: use netlify__deploy_site with deployDirectory (absolute path to the folder). Do NOT pass a siteId for new deployments — the tool will create a new site automatically. Only pass siteId when updating an existing site.`;
                 mcpDirective += `\n- To list sites: use netlify__get_projects.`;
-                mcpDirective += `\n- If asked to "create files AND deploy", do file creation via code FIRST, then call the MCP deploy tool as a SEPARATE step. Never try to do both in a single code block.`;
+                mcpDirective += `\n- If asked to "create files AND deploy": (1) create the files via python:run code, (2) then immediately call netlify__deploy_site with the directory path. Do NOT create a project first — just deploy directly.`;
+                mcpDirective += `\n- IMPORTANT: Do NOT call netlify__create_new_project before deploying. netlify__deploy_site handles new site creation automatically.`;
             }
 
             mcpDirective += `\n)`;
