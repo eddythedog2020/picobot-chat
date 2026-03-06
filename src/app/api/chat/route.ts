@@ -258,8 +258,10 @@ export async function POST(req: NextRequest) {
         let currentData = data;
         let currentChoice = firstChoice;
 
+        let lastToolResults = ''; // Track last tool results for fallback
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             const toolCalls = currentChoice?.message?.tool_calls;
+            console.log(`[MCP] Round ${round}: tool_calls=${toolCalls?.length || 0}, content=${(currentChoice?.message?.content || '').length} chars`);
             if (!toolCalls || toolCalls.length === 0) {
                 // No tool calls in this response
                 response = currentChoice?.message?.content || '';
@@ -307,6 +309,7 @@ export async function POST(req: NextRequest) {
 
             // Execute all tool calls
             const toolResults: { role: string; tool_call_id: string; content: string }[] = [];
+            let deployResult = ''; // Track deploy results specifically
             for (const toolCall of toolCalls) {
                 const toolName = toolCall.function.name;
                 let toolArgs: Record<string, unknown> = {};
@@ -320,7 +323,11 @@ export async function POST(req: NextRequest) {
                 try {
                     const result = await mcpManager.callTool(toolName, toolArgs);
                     const resultText = typeof result === 'string' ? result : JSON.stringify(result);
-                    console.log(`[MCP] Tool ${toolName} result (${resultText.length} chars): ${resultText.substring(0, 200)}`);
+                    console.log(`[MCP] Tool ${toolName} result (${resultText.length} chars): ${resultText.substring(0, 500)}`);
+                    // Track deploy results for fallback response
+                    if (toolName.includes('deploy') && resultText.includes('success')) {
+                        deployResult = resultText;
+                    }
                     toolResults.push({
                         role: 'tool',
                         tool_call_id: toolCall.id,
@@ -365,6 +372,14 @@ export async function POST(req: NextRequest) {
                 currentChoice = currentData.choices?.[0];
                 response = currentChoice?.message?.content || '';
                 console.log(`[MCP] Follow-up response: content=${response.length} chars, tool_calls=${currentChoice?.message?.tool_calls?.length || 0}`);
+                if (!response && deployResult) {
+                    // LLM didn't produce text, but deploy succeeded — use deploy result as response
+                    try {
+                        const dr = JSON.parse(deployResult);
+                        response = `✅ ${dr.message || 'Successfully deployed to Netlify.'} URL: ${dr.url || 'N/A'}`;
+                        console.log(`[MCP] Using deploy result as response: ${response}`);
+                    } catch { response = deployResult; }
+                }
                 // Loop continues — if there are more tool_calls, they'll be handled in the next iteration
             } else {
                 const errText = await followUpResponse.text();
@@ -401,13 +416,22 @@ export async function POST(req: NextRequest) {
                 if (!response) {
                     response = `MCP tool results:\n\n${toolResultsText}`;
                 }
+                lastToolResults = toolResultsText;
                 break; // Exit loop on error
             }
         }
 
         // If no response was generated after all rounds, provide a fallback
         if (!response) {
-            response = currentChoice?.message?.content || 'No response from API';
+            response = currentChoice?.message?.content || '';
+        }
+        if (!response && lastToolResults) {
+            // Last resort: include tool results directly
+            console.log(`[MCP] No LLM response, using last tool results as fallback`);
+            response = lastToolResults;
+        }
+        if (!response) {
+            response = 'No response from API';
         }
 
         // PERSISTENCE FOR AUTOMATED TESTS: 
