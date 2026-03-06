@@ -429,8 +429,36 @@ export default function ChatPage() {
 
       // Route to vision endpoint if images attached, otherwise picobot
       const endpoint = imageDataUrls.length > 0 ? "/api/chat/vision" : "/api/chat";
+
+      // Save uploaded images to workspace so code execution can access them
+      let savedImagePaths: string[] = [];
+      if (imageDataUrls.length > 0) {
+        for (let i = 0; i < imageDataUrls.length; i++) {
+          try {
+            const uploadRes = await authFetch("/api/workspace/upload-image", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                imageDataUrl: imageDataUrls[i],
+                filename: `chat_image_${Date.now()}_${i}`,
+              }),
+            });
+            const uploadData = await uploadRes.json();
+            if (uploadData.filePath) {
+              savedImagePaths.push(uploadData.filePath);
+            }
+          } catch { /* continue even if save fails */ }
+        }
+      }
+
+      // If images were saved, append file paths to the message for code execution context
+      let enrichedMessage = userMsgContent;
+      if (savedImagePaths.length > 0) {
+        enrichedMessage += `\n\n(System Note: The uploaded image(s) have been saved to the workspace. File paths: ${savedImagePaths.join(', ')})`;
+      }
+
       const payload: any = {
-        message: userMsgContent,
+        message: enrichedMessage,
         history,
         compactedSummary,
         memories: memoriesContext,

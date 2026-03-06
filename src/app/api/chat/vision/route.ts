@@ -123,13 +123,23 @@ export async function POST(req: NextRequest) {
 
         if (!apiResponse.ok) {
             const errorText = await apiResponse.text();
+            console.error(`[Vision] API error ${apiResponse.status}: ${errorText}`);
             return NextResponse.json({ response: `⚠️ Vision API Error (${apiResponse.status}): ${errorText}` });
         }
 
         const result = await apiResponse.json();
-        const response = result.choices?.[0]?.message?.content || 'No response from vision model.';
+        const response = result.choices?.[0]?.message?.content;
+
+        if (!response) {
+            // Log the full response for debugging
+            console.error('[Vision] Empty response from API. Full result:', JSON.stringify(result).slice(0, 500));
+            const detail = result.error?.message || result.detail || JSON.stringify(result).slice(0, 200);
+            return NextResponse.json({ response: `⚠️ Vision model returned no content. API response: ${detail}` });
+        }
+
         return NextResponse.json({ response });
     } catch (err: any) {
+        console.error('[Vision] Connection error:', err.message);
         return NextResponse.json({ response: `⚠️ Vision API connection error: ${err.message}` });
     }
 }
